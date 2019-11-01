@@ -4411,28 +4411,33 @@ sub fv3_decomp_set{
       if ($xpts%$nx == 0) {
 	  
 	  $ny = int $tasks/$nx/6;
-
+          print "nx=$nx ny=$ny xpts=$xpts ypts=$ypts\n";
 	  # test that $ny divides $xpts exactly
 	  # if so then get aspect ratio
 	  if ($ny != 0) {
-	      if ($ypts%$ny == 0) {
+            print "ny != 0\n";
+	      if ($ypts%$ny == 0 and  $nx*$ny*6 == $tasks) {
+		  print "ypts%ny == 0 and nx*ny*6 == tasks\n";
 		  if ($nx == $ny) {
 		      $layoutx=$nx;
 		      $layouty=$ny;
 		      last NZ;
 		  }else{
+		      print "nx != ny old aspect=$aspect\n";
 		      if (max($nx,$ny) / min($nx,$ny) < $aspect) {
 			  $aspect=max($nx,$ny) / min($nx,$ny);
 			  $layoutx=$nx;
 			  $layouty=$ny;
+  		          print "current aspect less than old current aspect=$aspect setting layoutx=$nx layouty=$ny\n";
 		      }
 		  }
 	      }
 	  }
       }
-  }
+    }
     # die if algorithm failed
     if ($layoutx > $xpts/4 or $layouty > $ypts/4  or  $layoutx*$layouty*6 != $tasks) {
+	print "tasks=$tasks layoutx=$layoutx layouty=$layoutx\n" ;
         die "$ProgName - ERROR: fv3_decomp_set failed to find a decomposition.\n" .
             "  layout needs to be set by the user.";
     }

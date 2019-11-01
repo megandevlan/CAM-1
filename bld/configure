@@ -486,6 +486,9 @@ EOF
 
 if ($print>=2) { print "CAM root directory: $cam_root$eol"; }
 
+# Root Source directory
+my $camsrcdir = $cfg_ref->get('cam_dir');
+
 #-----------------------------------------------------------------------------------------------
 # CAM build directory.
 my $cam_bld;
@@ -2849,7 +2852,7 @@ sub write_fv3core_filepath
     print $fh "$CASEROOT/SourceMods/src.cam\n";
     print $fh "$camsrcdir/src/dynamics/fv3/microphys\n";
     print $fh "$camsrcdir/src/dynamics/fv3/FV3/atmos_cubed_sphere/model\n";
-    print $fh "$$camsrcdir/src/dynamics/fv3/FV3/atmos_cubed_sphere/tools\n";
+    print $fh "$camsrcdir/src/dynamics/fv3/FV3/atmos_cubed_sphere/tools\n";
 ###    print $fh "$cam_root/components/cam/src/dynamics/fv3/FV3/atmos_cubed_sphere/driver/fvGFS\n";
 
     $fh->close;
