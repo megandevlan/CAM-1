@@ -96,6 +96,7 @@ integer                                      :: mybindex,mybindex_ew,mybindex_ns
 real(r8), allocatable, target, dimension(:,:,:) ::   locidx_g
 real(r8), allocatable, target, dimension(:,:,:) ::   blkidx_g
 real(r8), allocatable, target, dimension(:,:,:) ::   gindex_g
+real(r8), allocatable, target, dimension(:,:) ::   gblidx_g
 
 integer, public :: uniqpts_glob = 0     ! number of dynamics columns
 integer, public :: uniqpts_glob_ew = 0     ! number of dynamics columns for Dgrid ew
@@ -524,25 +525,18 @@ subroutine get_gcol_block_d(gcol, cnt, blockid, bcid, localblockid)
     integer, intent(out) :: bcid(cnt)    ! column index within block
     integer, intent(out), optional :: localblockid(cnt)
 
-    integer :: ind(2)
+    integer :: ind(2),tot
     integer :: tmpblkid(npx-1,npy-1,6),tmplcid(npx-1,npy-1,6)
-    
+
     if (cnt .ne. 1) then
        call endrun ('get_gcol_block_d: cnt is not equal to 1:.')
     end if
-
-    if (any(gcol .eq. gindex_g)) then
-       tmpblkid=0
-       tmplcid=0
-       where(gindex_g .eq. gcol)
-          tmpblkid=blkidx_g
-          tmplcid=locidx_g
-       end where
-       blockid(1) = maxval(tmpblkid)
-       bcid(1) = maxval(tmplcid)
+    tot=(npx-1)*(npy-1)*6
+    if (gcol.lt.1.or.gcol.gt.tot) then
+       call endrun ('get_gcol_block_d: global column number is out of bounds')
     else
-        write(iulog,*)"gcol=",gcol,";max(mygindex)=",maxval(mygindex),";min(mygindex)=",minval(mygindex)
-        call endrun ('get_gcol_block_d: global column index out of bond.')
+       blockid(1) = gblidx_g(gcol,1)
+       bcid(1) = gblidx_g(gcol,2)
     end if
 
     if (present(localblockid)) then
@@ -887,7 +881,7 @@ subroutine define_cam_grids(Atm)
   allocate(locidx_g(npx-1,npy-1,nregions))
   allocate(blkidx_g(npx-1,npy-1,nregions))
   allocate(gindex_g(npx-1,npy-1,nregions))
-
+  allocate(gblidx_g( (npx-1)*(npy-1)*nregions,2))
   allocate(mygindex(is:ie,js:je))
   allocate(mygindex_ew(is:ie+1,js:je))
   allocate(mygindex_ns(is:ie,js:je+1))
@@ -915,6 +909,7 @@ subroutine define_cam_grids(Atm)
   blkidx_g(is:ie,js:je,tile)=mybindex
   locidx_g(is:ie,js:je,tile)=mylindex(is:ie,js:je)
   gindex_g(is:ie,js:je,tile)=mygindex(is:ie,js:je)
+
   nx=npx-1
   ny=npy-1
   call mp_gather(locidx_g, is, ie, js, je, nx ,ny, nregions)
@@ -924,6 +919,14 @@ subroutine define_cam_grids(Atm)
   call mp_bcst(blkidx_g, nx, ny, nregions)
   call mp_bcst(gindex_g, nx, ny, nregions)
 
+  do n = 1, nregions
+     do j=1,nx
+        do i=1,ny
+           gblidx_g(gindex_g(i,j,n),1)=blkidx_g(i,j,n)
+           gblidx_g(gindex_g(i,j,n),2)=locidx_g(i,j,n)
+        end do
+     end do
+  end do
 
   !-----------------------
   ! Create FFSL grid object

@@ -16,6 +16,13 @@
 
 <dtime dyn="fv3"                   >1800</dtime>
 <dtime dyn="fv3"   waccmx="1"      >300 </dtime>
+<dtime dyn="fv3"   hgrid="C48"     >1800</dtime>
+<dtime dyn="fv3"   hgrid="C96"     >1800</dtime>
+<dtime dyn="fv3"   hgrid="C192"    >900</dtime>
+<dtime dyn="fv3"   hgrid="C384"    >450</dtime>
+<dtime dyn="fv3"   hgrid="C768"    >225</dtime>
+<dtime dyn="fv3"   hgrid="C1152"   >150</dtime>
+<dtime dyn="fv3"   hgrid="C3072"   >90</dtime>
 
 <dtime dyn="se"                    >1800</dtime>
 <dtime dyn="se"    hgrid="ne5np4"  >1800</dtime>
