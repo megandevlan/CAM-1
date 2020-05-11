@@ -154,12 +154,12 @@ contains
     !-----------------------------------------------------------------------
 
     ! Get physics options
-    call phys_getopts(shallow_scheme_out       = shallow_scheme, &
-                      macrop_scheme_out        = macrop_scheme,   &
-                      microp_scheme_out        = microp_scheme,   &
-                      cld_macmic_num_steps_out = cld_macmic_num_steps, &
-                      do_clubb_sgs_out         = do_clubb_sgs,     &
-                      use_subcol_microp_out    = use_subcol_microp, &
+    call phys_getopts(shallow_scheme_out          = shallow_scheme, &
+                      macrop_scheme_out           = macrop_scheme,   &
+                      microp_scheme_out           = microp_scheme,   &
+                      cld_macmic_num_steps_out    = cld_macmic_num_steps, &
+                      do_clubb_sgs_out            = do_clubb_sgs,     &
+                      use_subcol_microp_out       = use_subcol_microp, &
                       state_debug_checks_out   = state_debug_checks)
 
     ! Initialize dyn_time_lvls
@@ -1088,6 +1088,7 @@ contains
     use physconst,       only: stebol, latvap
     use carma_intr,      only: carma_accumulate_stats
     use spmd_utils,      only: mpicom
+    use iop_forcing,     only: scam_use_iop_srf
 #if ( defined OFFLINE_DYN )
     use metdata,         only: get_met_srf2
 #endif
@@ -1116,6 +1117,10 @@ contains
     !
 
     if(single_column.and.scm_crm_mode) return
+    !-----------------------------------------------------------------------
+    ! if using IOP values for surface fluxes overwrite here after surface components run
+    !-----------------------------------------------------------------------
+    if (single_column) call scam_use_iop_srf(cam_in)
 
     !-----------------------------------------------------------------------
     ! Tendency physics after coupler
@@ -1565,9 +1570,11 @@ contains
     ! Scale dry mass and energy (does nothing if dycore is EUL or SLD)
     call cnst_get_ind('CLDLIQ', ixcldliq)
     call cnst_get_ind('CLDICE', ixcldice)
+
     tmp_q     (:ncol,:pver) = state%q(:ncol,:pver,1)
     tmp_cldliq(:ncol,:pver) = state%q(:ncol,:pver,ixcldliq)
     tmp_cldice(:ncol,:pver) = state%q(:ncol,:pver,ixcldice)
+
     ! For not 'FV', physics_dme_adjust is called for energy diagnostic purposes only.  So, save off tracers
     if (.not.dycore_is('FV').and.&
          (hist_fld_active('SE_pAM').or.hist_fld_active('KE_pAM').or.hist_fld_active('WV_pAM').or.&
@@ -1790,6 +1797,7 @@ contains
     real(r8) :: zero_tracers(pcols,pcnst)
 
     logical   :: lq(pcnst)
+
     !-----------------------------------------------------------------------
 
     call t_startf('bc_init')
@@ -1834,7 +1842,6 @@ contains
 
     ! Since clybry_fam_adj operates directly on the tracers, and has no
     ! physics_update call, re-run qneg3.
-
     call qneg3('TPHYSBCc',lchnk  ,ncol    ,pcols   ,pver    , &
          1, pcnst, qmin  ,state%q )
 
