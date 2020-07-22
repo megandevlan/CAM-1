@@ -1,4 +1,23 @@
 module scamMod
+  !----------------------------------------------------------------------
+  !
+  ! This module provides control variables and namelist functionality
+  ! for SCAM.
+  !
+  ! As with global CAM, SCAM is initialized with state information
+  ! from the initial and boundary files. For each succeeding timestep
+  ! SCAM calculates the physics tendencies and combines these with
+  ! the advective tendencies provided by the IOP file to produce
+  ! a forcast. Generally, the control variables in this module
+  ! determine what data and parameterizations will be used to make
+  ! the forecast. For instance, many of the control variables in
+  ! this module provide flexibility to affect the forecast by overriding
+  ! parameterization prognosed tendencies with observed tendencies
+  ! of a particular field program recorded on the IOP file.
+  ! 
+  ! Public functions/subroutines:
+  !   scam_readnl
+  !-----------------------------------------------------------------------
 
 use shr_kind_mod,   only: r8 => shr_kind_r8
 use pmgrid,         only: plon, plat, plev, plevp
