@@ -86,7 +86,7 @@
 
   <compset>
     <alias>FCSCAM</alias>
-    <lname>2000_CAM60%SCAM%CCTS_CLM50%SP_CICE%PRES_DOCN%DOM_SROF_SGLC_SWAV</lname>
+    <lname>2000_CAM60%SCAM%CCTS1_CLM50%SP_CICE%PRES_DOCN%DOM_SROF_SGLC_SWAV</lname>
     <science_support grid="T42_T42"/>
   </compset>
 
@@ -530,8 +530,8 @@
 	<value  compset="HIST_CAM60%WCMD">2005-01-01</value>
 	<value  compset="HIST_CAM60%WCMD%SDYN" grid="a%1.9x2.5">1980-01-01</value>
 	<value  compset="HIST_CAM60%WCSC">1850-01-01</value>
-	<value  compset="HIST_CAM60%CCTS[12]">2010-01-01</value>
-	<value  compset="HIST_CAM60%CCTS[12]" grid="a%ne0np4CONUS">2013-01-01</value>
+	<value  compset="HIST_CAM60%.*CCTS[12]">2010-01-01</value>
+	<value  compset="HIST_CAM60%.*CCTS[12]" grid="a%ne0np4CONUS">2013-01-01</value>
 	<value  compset="HIST_CAM60%CVBSX">1995-01-01</value>
 	<value  compset="HIST_CAM60%CFIRE">1995-01-01</value>
 	<value  compset="RCP[2468]_CAM\d+">2005-01-01</value>
