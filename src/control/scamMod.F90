@@ -123,6 +123,7 @@ real(r8), public ::      aldirobs(1)         ! observed aldir
 real(r8), public ::      aldifobs(1)         ! observed aldif
 real(r8), public ::      asdirobs(1)         ! observed asdir
 real(r8), public ::      asdifobs(1)         ! observed asdif
+real(r8), public ::      sflxobs(pcnst)      ! surface flux emissions
 
 real(r8), public ::      wfld(plev)          ! Vertical motion (slt)
 real(r8), public ::      wfldh(plevp)        ! Vertical motion (slt)
@@ -142,6 +143,7 @@ integer, public ::     base_secs             ! Time of day of start time (sec)
 ! SCAM public data defaults
 
 logical, public ::  doiopupdate            = .false. ! do we need to read next iop timepoint
+logical, public ::  have_sflx(pcnst)       = .false. ! dataset contains surface emissions
 logical, public ::  have_lhflx             = .false. ! dataset contains lhflx 
 logical, public ::  have_shflx             = .false. ! dataset contains shflx
 logical, public ::  have_tg                = .false. ! dataset contains tg
@@ -210,6 +212,7 @@ logical, public ::  scm_use_obs_uv         = .true. ! Use the SCAM-IOP specified
 
 logical, public ::  scm_use_obs_qv         = .false. ! Use the SCAM-IOP specified observed qv  at each time step instead of forecasting.
 logical, public ::  scm_iop_lhflxshflxTg   = .false. !turn off LW rad
+logical, public ::  scm_iop_sflx           = .false. !turn off surf emissions
 logical, public ::  scm_iop_Tg             = .false. !turn off LW rad
 
 character(len=200), public ::  scm_clubb_iop_name   ! IOP name for CLUBB
@@ -245,7 +248,7 @@ subroutine scam_readnl(nlfile,single_column_in,scmlat_in,scmlon_in)
   real(r8) :: ioplat,ioplon
 
 ! this list should include any variable that you might want to include in the namelist
-  namelist /scam_nl/ iopfile, scm_iop_lhflxshflxTg, scm_iop_Tg, scm_relaxation, &
+  namelist /scam_nl/ iopfile, scm_iop_lhflxshflxTg, scm_iop_sflx, scm_iop_Tg, scm_relaxation, &
        scm_relax_top_p,scm_relax_bot_p,scm_relax_tau_sec, &
        scm_cambfb_mode,scm_crm_mode,scm_zadv_uv,scm_zadv_T,scm_zadv_q,&
        scm_use_obs_T, scm_use_obs_uv, scm_use_obs_qv, &
