@@ -26,11 +26,11 @@ module iop
                               have_numice, have_divu, have_divv, divt, have_divt, vertdivt, &
                               have_vertdivt, divt3d, have_divt3d, have_divu3d,  have_divv3d, &
                               have_ptend, ptend, wfld, uobs, have_u, uobs, vobs, have_v, &
-                              vobs, have_prec, have_q1, have_q2, have_lhflx, have_shflx, &
+                              vobs, have_prec, have_q1, have_q2, have_lhflx, have_shflx, have_sflx, &
                               use_3dfrc, betacam, fixmascam, alphacam, doiopupdate, &
                               cldiceobs,  cldliqobs, cldobs, clwpobs, divu, &
                               divu3d, divv, divv3d, iopfile, lhflxobs, numiceobs, numliqobs, &
-                              precobs, q1obs, scmlat, scmlon, shflxobs, tsair, have_omega, wfldh,qinitobs
+                              precobs, q1obs, scmlat, scmlon, shflxobs, tsair, have_omega, wfldh,qinitobs,sflxobs
   use shr_kind_mod,     only: r8 => shr_kind_r8, max_chars=>shr_kind_cl
   use shr_scam_mod,     only: shr_scam_GetCloseLatLon
   use spmd_utils,       only: masterproc
@@ -149,6 +149,9 @@ subroutine readiopdata(timelevel)
         use shr_sys_mod,         only: shr_sys_flush
 	use hycoef,              only: hyam, hybm
         use error_messages,      only: handle_ncerr
+        use mo_chem_utls,        only : get_spc_ndx
+        use mo_gas_phase_chemdr, only : map2chm
+        use constituents,        only : sflxnam
 !-----------------------------------------------------------------------
    implicit none
 #if ( defined RS6000 )
@@ -174,7 +177,7 @@ integer, optional, intent(in) :: timelevel
 
    integer bdate, ntime,nstep
    integer, allocatable :: tsec(:)
-   integer k, m
+   integer k, m, n
    integer icldliq,icldice
    integer inumliq,inumice,idx
 
@@ -194,6 +197,7 @@ integer, optional, intent(in) :: timelevel
    integer strt4(4),cnt4(4),strt5(4),cnt5(4)
    character(len=16) :: lowername
    character(len=max_chars) :: units ! Units
+   integer h2o_ndx
 
    nstep = get_nstep()
    fill_ends= .false.
@@ -571,7 +575,22 @@ integer, optional, intent(in) :: timelevel
       endif
 
    end do
-
+!  read surface emissions
+   h2o_ndx   = get_spc_ndx('H2O')
+   do m = 1,pcnst
+      n = map2chm(m)
+      if ( n /= h2o_ndx .and. n > 0 ) then
+         tmpdata = 0._r8
+         status =  nf90_inq_varid( ncid, trim(sflxnam(m)), varid   )
+         if ( status .ne. nf90_noerr ) then
+            have_sflx(m) = .false.
+         else
+            status = nf90_get_var(ncid, varid, srf(1), strt4)
+            have_sflx(m) = .true.
+            sflxobs(m)=srf(1)
+         endif
+      endif
+   end do
 
    numliqobs = 0._r8
    call cnst_get_ind('NUMLIQ', inumliq, abort=.false.)

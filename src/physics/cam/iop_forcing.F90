@@ -14,6 +14,7 @@
 
   public scam_use_iop_srf
   public scam_set_iop_Tg
+  public scam_set_iop_srf_emis
 
   contains
 
@@ -36,6 +37,7 @@
     type(cam_in_t), intent(INOUT) :: cam_in(begchunk:endchunk)
     integer                       :: c    ! Chunk index
     integer                       :: ncol ! Number of columns
+    integer                       :: m  ! srf flx index
 
     if( scm_iop_lhflxshflxTg .and. scm_iop_Tg ) then
         call endrun( 'scam_use_iop_srf : scm_iop_lhflxshflxTg and scm_iop_Tg must not be specified at the same time.')
@@ -93,5 +95,31 @@
     endif
 
   end subroutine scam_set_iop_Tg
+
+  subroutine scam_set_iop_srf_emis( sflx )
+  ! -------------------------------------------- !
+  ! USE the SCAM-IOP specified surface emissions !
+  ! -------------------------------------------- !
+    use scamMod,             only : scm_iop_sflx, have_sflx, sflxobs
+    use constituents,        only : pcnst
+    use mo_gas_phase_chemdr, only : map2chm
+
+    implicit none
+    save
+
+    real(r8),        intent(inout) :: sflx(:,:)
+    integer                        :: m,n
+
+    if( scm_iop_sflx ) then
+       do m=1,pcnst
+          if( have_sflx(m) ) then
+             n = map2chm(m)
+             write(6,*)'have_sflx(',m,')=',sflxobs(m)
+             sflx(:,n) = sflxobs(m)
+          endif
+       end do
+    endif
+
+  end subroutine scam_set_iop_srf_emis
 
   end module iop_forcing

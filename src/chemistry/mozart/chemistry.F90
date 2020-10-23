@@ -981,6 +981,8 @@ end function chem_is_active
     use mo_srf_emissions, only: set_srf_emissions
     use fire_emissions,   only: fire_emissions_srf
     use ocean_emis,       only: ocean_emis_getflux
+    use scamMod,          only: single_column
+    use iop_forcing,      only: scam_set_iop_srf_emis
 
     ! Arguments:
 
@@ -1029,7 +1031,10 @@ end function chem_is_active
     !-----------------------------------------------------------------------      
     !        ... Set surface emissions
     !-----------------------------------------------------------------------      
+
     call set_srf_emissions( lchnk, ncol, sflx(:,:) )
+    ! reset surface fluxes from scam iop if requested
+    if (single_column) call scam_set_iop_srf_emis(sflx(:,:))
 
     do m = 1,pcnst
        n = map2chm(m)
