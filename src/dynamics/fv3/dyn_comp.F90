@@ -959,6 +959,30 @@ subroutine read_inidat(dyn_in)
      end do
   end do
 
+
+  ! If a topo file is specified use it.  This will overwrite the PHIS set by the
+  ! analytic IC option.
+  !
+  ! If using the physics grid then the topo file will be on that grid since its
+  ! contents are primarily for the physics parameterizations, and the values of
+  ! PHIS should be consistent with the values of sub-grid variability (e.g., SGH)
+  ! which are computed on the physics grid.
+  if (associated(fh_topo)) then
+
+     ! We need to be able to see the PIO return values
+     call pio_seterrorhandling(fh_topo, PIO_BCAST_ERROR, pio_errtype)
+
+     fieldname = 'PHIS'
+     if (dyn_field_exists(fh_topo, trim(fieldname))) then
+        call read_dyn_var(trim(fieldname), fh_topo, 'ncol', phis_tmp)
+     else
+        call endrun(trim(subname)//': ERROR: Could not find PHIS field on input datafile')
+     end if
+
+     ! Put the error handling back the way it was
+     call pio_seterrorhandling(fh_topo, pio_errtype)
+  end if
+
   ! Set ICs.  Either from analytic expressions or read from file.
 
   if (analytic_ic_active()) then
@@ -966,10 +990,8 @@ subroutine read_inidat(dyn_in)
      inic_wet = .true.
      ! First, initialize all the variables, then assign
      allocate(dbuf2(blksize,1))
-     allocate(dbuf3(blksize,nlev,1))
-     allocate(dbuf4(blksize,nlev, 1,pcnst))
+     allocate(dbuf4(blksize,nlev, 1,pcnst+4))
      dbuf2 = 0.0_r8
-     dbuf3 = 0.0_r8
      dbuf4 = 0.0_r8
 
      allocate(m_ind(pcnst))
@@ -977,75 +999,59 @@ subroutine read_inidat(dyn_in)
         m_ind(m_cnst) = m_cnst
      end do
 
-     call analytic_ic_set_ic(vcoord, latvals_rad, lonvals_rad, glob_ind,PS=dbuf2)
-     do j = js, je
+     if (.not.associated(fh_topo)) then
+       !
+       ! if topo-file is not specified then analytic ic will set PHIS
+       !
+       call analytic_ic_set_ic(vcoord, latvals_rad, lonvals_rad, glob_ind , &
+            PHIS_OUT=phis_tmp(:,:))
+     endif
+
+      ! Init tracers on the GLL grid.  Note that analytic_ic_set_ic makes
+      ! use of cnst_init_default for the tracers except water vapor.
+
+      call analytic_ic_set_ic(vcoord, latvals_rad, lonvals_rad, glob_ind,  &
+         PS=dbuf2, U=dbuf4(:,:,:,(pcnst+1)), V=dbuf4(:,:,:,(pcnst+2)),     &
+         T=dbuf4(:,:,:,(pcnst+3)), Q=dbuf4(:,:,:,1:pcnst), m_cnst=m_ind,   &
+         PHIS_IN=PHIS_tmp)
+
+      do j = js, je
         do i = is, ie
-           ! PS
-           n=mylindex(i,j)
-           atm(mytile)%ps(i,j) =   dbuf2(n, 1)
+          ! PS
+          n=mylindex(i,j)
+          atm(mytile)%ps(i,j) =   dbuf2(n, 1)
         end do
-     end do
+      end do
 
-     call analytic_ic_set_ic(vcoord, latvals_rad, lonvals_rad, glob_ind ,            &
-          PHIS_OUT=phis_tmp(:,:))
-
-     call analytic_ic_set_ic(vcoord, latvals_rad, lonvals_rad, glob_ind,            &
-          T=dbuf3(:,:,:))
-
-     do j = js, je
+      do j = js, je
         do i = is, ie
-           ! T
-           n=mylindex(i,j)
-           atm(mytile)%pt(i,j,:) = dbuf3(n, :, 1)
+          n=mylindex(i,j)
+          ! U a-grid
+          atm(mytile)%ua(i,j,:) = dbuf4(n, :,1,(pcnst+1))
+          ! V a-grid
+          atm(mytile)%va(i,j,:) = dbuf4(n, :,1,(pcnst+2))
+          ! T
+          atm(mytile)%pt(i,j,:) = dbuf4(n, :,1,(pcnst+3))
         end do
-     end do
+      end do
 
-
-     dbuf3=0._r8
-     call analytic_ic_set_ic(vcoord, latvals_rad, lonvals_rad, glob_ind,            &
-          U=dbuf3(:,:,:))
-
-     do j = js, je
-        do i = is, ie
-           ! U a-grid
-           n=mylindex(i,j)
-           atm(mytile)%ua(i,j,:) = dbuf3(n, :, 1)
-        end do
-     end do
-
-     dbuf3=0._r8
-     call analytic_ic_set_ic(vcoord, latvals_rad, lonvals_rad, glob_ind,            &
-          V=dbuf3(:,:,:))
-
-     do j = js, je
-        do i = is, ie
-           ! V a-grid
-           n=mylindex(i,j)
-           atm(mytile)%va(i,j,:) = dbuf3(n, :, 1)
-        end do
-     end do
-
-     call analytic_ic_set_ic(vcoord, latvals_rad, lonvals_rad, glob_ind,            &
-          Q=dbuf4(:,:,:,1:pcnst), m_cnst=m_ind)
-
-     ! Tracers to be advected on FFSL grid.
-     do m_cnst = 1, pcnst
+      ! Tracers to be advected on FFSL grid.
+      do m_cnst = 1, pcnst
         m_cnst_ffsl=qsize_tracer_idx_cam2dyn(m_cnst)
         Atm(mytile)%q(:,:,:,m_cnst_ffsl) = 0.0_r8
         do j = js, je
-           do i = is, ie
-              indx=mylindex(i,j)
-              Atm(mytile)%q(i,j,:,m_cnst_ffsl) = dbuf4(indx, :, 1, m_cnst)
-           end do
+          do i = is, ie
+            indx=mylindex(i,j)
+            Atm(mytile)%q(i,j,:,m_cnst_ffsl) = dbuf4(indx, :, 1, m_cnst)
+          end do
         end do
-     end do
+      end do
 
      !-----------------------------------------------------------------------
      call a2d3djt(atm(mytile)%ua, atm(mytile)%va, atm(mytile)%u, atm(mytile)%v, is,  ie,  js,  je, &
                   isd, ied, jsd, jed, npx,npy, nlev, atm(mytile)%gridstruct, atm(mytile)%domain)
 
      deallocate(dbuf2)
-     deallocate(dbuf3)
      deallocate(dbuf4)
      deallocate(m_ind)
 
@@ -1209,29 +1215,6 @@ subroutine read_inidat(dyn_in)
   deallocate(var3d)
   ! Put the error handling back the way it was
   call pio_seterrorhandling(fh_ini, err_handling)
-
-  ! If a topo file is specified use it.  This will overwrite the PHIS set by the
-  ! analytic IC option.
-  !
-  ! If using the physics grid then the topo file will be on that grid since its
-  ! contents are primarily for the physics parameterizations, and the values of
-  ! PHIS should be consistent with the values of sub-grid variability (e.g., SGH)
-  ! which are computed on the physics grid.
-  if (associated(fh_topo)) then
-
-     ! We need to be able to see the PIO return values
-     call pio_seterrorhandling(fh_topo, PIO_BCAST_ERROR, pio_errtype)
-
-     fieldname = 'PHIS'
-     if (dyn_field_exists(fh_topo, trim(fieldname))) then
-        call read_dyn_var(trim(fieldname), fh_topo, 'ncol', phis_tmp)
-     else
-        call endrun(trim(subname)//': ERROR: Could not find PHIS field on input datafile')
-     end if
-
-     ! Put the error handling back the way it was
-     call pio_seterrorhandling(fh_topo, pio_errtype)
-  end if
 
   ! Process phis_tmp
   atm(mytile)%phis = 0.0_r8
