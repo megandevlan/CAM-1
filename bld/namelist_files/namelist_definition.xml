@@ -5005,13 +5005,6 @@ Use the specified surface emission properties.
 Default: FALSE
 </entry>
 
-
-<entry id="scm_iop_sflx" type="logical" category="scam"
-       group="scam_nl" valid_values="">
-Use the specified surface emission properties.
-Default: FALSE
-</entry>
-
 <entry id="scm_iop_tg" type="logical" category="scam"
        group="scam_nl" valid_values="">
 Use the specified surface properties.

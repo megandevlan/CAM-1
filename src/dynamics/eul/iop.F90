@@ -26,7 +26,7 @@ module iop
                               have_numice, have_divu, have_divv, divt, have_divt, vertdivt, &
                               have_vertdivt, divt3d, have_divt3d, have_divu3d,  have_divv3d, &
                               have_ptend, ptend, wfld, uobs, have_u, uobs, vobs, have_v, &
-                              have_prec, have_evap, have_q1, have_q2, have_lhflx, have_shflx, have_sflx, &
+                              vobs, have_prec, have_evap, have_q1, have_q2, have_lhflx, have_shflx, have_sflx, &
                               use_3dfrc, betacam, fixmascam, alphacam, doiopupdate, &
                               cldiceobs,  cldliqobs, cldobs, clwpobs, divu, &
                               divu3d, divv, divv3d, iopfile, lhflxobs, numiceobs, numliqobs, &
@@ -39,6 +39,7 @@ module iop
                               rtpthlp_clasp ,tsoilobs,upwp_clasp,vpwp_clasp,wp2_clasp ,wp2rtp_clasp, &
                               wp2thlp_clasp,wp3_clasp ,wp4_clasp ,wprtp2_clasp,wpqtpsfc_clasp,wpthlp2_clasp, &
                               wprtpthlp_clasp ,wpthlpsfc_clasp,uref_clasp,vref_clasp
+  
 
   use shr_kind_mod,     only: r8 => shr_kind_r8, max_chars=>shr_kind_cl
   use shr_scam_mod,     only: shr_scam_GetCloseLatLon
