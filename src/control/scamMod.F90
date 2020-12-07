@@ -112,7 +112,10 @@ real(r8), public ::      q2obs(plev)         ! observed apparent heat sink
 real(r8), public ::      tdiff(plev)         ! model minus observed temp 
 real(r8), public ::      tground(1)          ! ground temperature
 real(r8), public ::      tobs(plev)          ! actual temperature
-real(r8), public ::      tsair(1)            ! air temperature at the surface
+real(r8), public ::      tsair(1)            ! air temperature 2m
+real(r8), public ::      qrefobs(1)          ! q 2m
+real(r8), public ::      uref_clasp(1)       ! u wind 10m
+real(r8), public ::      vref_clasp(1)       ! v wind 10m
 real(r8), public ::      udiff(plev)         ! model minus observed uwind
 real(r8), public ::      uobs(plev)          ! actual u wind
 real(r8), public ::      vdiff(plev)         ! model minus observed vwind
@@ -135,6 +138,25 @@ real(r8), public ::      divv(plev)          ! Horiz Divergence of N/S
 real(r8), public, pointer :: loniop(:)
 real(r8), public, pointer :: latiop(:)
 
+real(r8), public ::    evapobs(1)              ! land obs
+real(r8), public ::    lwdnsrfobs(1)           ! land obs
+real(r8), public ::    lwupsrfobs(1)           ! land obs
+real(r8), public ::    qp2obs(1)               ! land obs
+real(r8), public ::    swdnsrfobs(1)           ! land obs
+real(r8), public ::    swupsrfobs(1)           ! land obs
+real(r8), public ::    thlpqp_clasp(1)         ! land obs
+real(r8), public ::    tsoilobs(1)             ! land obs
+real(r8), public ::    upwp_clasp(1)           ! land obs
+real(r8), public ::    vpwp_clasp(1)           ! land obs
+
+real(r8), public ::    wp2qp_clasp(1)             ! land obs
+real(r8), public ::    wp2thetap_clasp(1)         ! land obs
+real(r8), public ::    wpqp2_clasp(1)             ! land obs
+real(r8), public ::    wpqtpsfc_clasp(1)          ! land obs
+real(r8), public ::    wpthetap2_clasp(1)         ! land obs
+real(r8), public ::    wpthetapqp_clasp(1)       ! land obs
+real(r8), public ::    wpthlpsfc_clasp(1)         ! land obs
+
 integer, public ::     iopTimeIdx            ! index into iop dataset
 integer, public ::     steplength            ! Length of time-step
 integer, public ::     base_date             ! Date in (yyyymmdd) of start time
@@ -144,10 +166,59 @@ integer, public ::     base_secs             ! Time of day of start time (sec)
 
 logical, public ::  doiopupdate            = .false. ! do we need to read next iop timepoint
 logical, public ::  have_sflx(pcnst)       = .false. ! dataset contains surface emissions
+!clasp iop vars
+logical, public ::  have_evap              = .false. !
+logical, public ::  have_lwdnsrf           = .false. ! land obs
+logical, public ::  have_lwupsrf           = .false. ! land obs
+logical, public ::  have_qp2               = .false. ! land obs
+logical, public ::  have_swdnsrf           = .false. ! land obs
+logical, public ::  have_swupsrf           = .false. ! land obs
+logical, public ::  have_thlpqp_clasp      = .false. ! land obs
+logical, public ::    have_tsoil           = .false. ! land obs
+logical, public ::    have_upwp_clasp      = .false. ! land obs
+logical, public ::    have_vpwp_clasp      = .false. ! land obs
+
+logical, public ::    have_wp2_clasp       = .false. ! land obs
+real(r8), public ::   wp2_clasp(1)
+logical, public ::    have_thlp2_clasp     = .false. ! land obs
+real(r8), public ::   thlp2_clasp(1)
+logical, public ::    have_rtp2_clasp      = .false. ! land obs
+real(r8), public ::   rtp2_clasp(1)
+logical, public ::    have_rtpthlp_clasp   = .false. ! land obs
+real(r8), public ::   rtpthlp_clasp(1)
+logical, public ::    have_wp3_clasp       = .false. ! land obs
+real(r8), public ::   wp3_clasp(1)
+logical, public ::    have_wp4_clasp       = .false. ! land obs
+real(r8), public ::   wp4_clasp(1)
+logical, public ::    have_wprtp_clasp    = .false. ! land obs
+real(r8), public ::   wprtp_clasp(1)
+logical, public ::    have_wprtp2_clasp    = .false. ! land obs
+real(r8), public ::   wprtp2_clasp(1)
+logical, public ::    have_wpthlp2_clasp   = .false. ! land obs
+real(r8), public ::   wpthlp2_clasp(1)
+logical, public ::    have_wpthlp_clasp   = .false. ! land obs
+real(r8), public ::   wpthlp_clasp(1)
+logical, public ::    have_wp2rtp_clasp    = .false. ! land obs
+real( kind = selected_real_kind(12) ), public ::   wp2rtp_clasp(1)
+logical, public ::    have_wp2thlp_clasp   = .false. ! land obs
+real( kind = selected_real_kind(12) ), public ::   wp2thlp_clasp(1)
+logical, public ::    have_wprtpthlp_clasp = .false. ! land obs
+real( kind = selected_real_kind(12) ), public ::   wprtpthlp_clasp(1)
+
+logical, public ::  have_wp2qp_clasp       = .false. ! land obs
+logical, public ::  have_wp2thetap_clasp   = .false. ! land obs
+logical, public ::  have_wpqp2_clasp       = .false. ! land obs
+logical, public ::  have_wpqtpsfc_clasp    = .false. ! land obs
+logical, public ::  have_wpthetap2_clasp   = .false. ! land obs
+logical, public ::  have_wpthetapqp_clasp  = .false. ! land obs
+logical, public ::  have_wpthlpsfc_clasp   = .false. ! land obs
 logical, public ::  have_lhflx             = .false. ! dataset contains lhflx 
 logical, public ::  have_shflx             = .false. ! dataset contains shflx
 logical, public ::  have_tg                = .false. ! dataset contains tg
 logical, public ::  have_tsair             = .false. ! dataset contains tsair
+logical, public ::  have_qref              = .false. ! dataset contains qref
+logical, public ::  have_uref_clasp        = .false. ! dataset contains uref
+logical, public ::  have_vref_clasp        = .false. ! dataset contains vref
 logical, public ::  have_divq              = .false. ! dataset contains divq 
 logical, public ::  have_divt              = .false. ! dataset contains divt
 logical, public ::  have_divq3d            = .false. ! dataset contains divq3d 
@@ -214,6 +285,7 @@ logical, public ::  scm_use_obs_qv         = .false. ! Use the SCAM-IOP specifie
 logical, public ::  scm_iop_lhflxshflxTg   = .false. !turn off LW rad
 logical, public ::  scm_iop_sflx           = .false. !turn off surf emissions
 logical, public ::  scm_iop_Tg             = .false. !turn off LW rad
+logical, public ::  scm_iop_land_srf       = .false. !turn off LW rad
 
 character(len=200), public ::  scm_clubb_iop_name   ! IOP name for CLUBB
 
@@ -253,7 +325,8 @@ subroutine scam_readnl(nlfile,single_column_in,scmlat_in,scmlon_in)
        scm_cambfb_mode,scm_crm_mode,scm_zadv_uv,scm_zadv_T,scm_zadv_q,&
        scm_use_obs_T, scm_use_obs_uv, scm_use_obs_qv, &
        scm_relax_linear, scm_relax_tau_top_sec, &
-       scm_relax_tau_bot_sec, scm_force_latlon, scm_relax_fincl, scm_backfill_iop_w_init
+       scm_relax_tau_bot_sec, scm_force_latlon, scm_relax_fincl, scm_backfill_iop_w_init, &
+       scm_iop_land_srf
 
   single_column=single_column_in
 
