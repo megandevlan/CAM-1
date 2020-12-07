@@ -1207,6 +1207,21 @@ end subroutine clubb_init_cnst
       call addfld ( 'edmf_qtflx'    , (/ 'ilev' /), 'A', 'W/m2'    , 'qt flux (EDMF)' )
     end if 
 
+    ! clasp 
+    call addfld('WPRTP2_CLUBB', (/ 'ilev' /), 'A',  '-', 'wprtp2_clubb')
+    call addfld('WPTHLP2_CLUBB', (/ 'ilev' /), 'A', '-', 'wpthlp2_clubb')
+    call addfld('WP2RTP_CLUBB', (/ 'ilev' /), 'A',  '-', 'wp2rtp_clubb')
+    call addfld('WP2THLP_CLUBB', (/ 'ilev' /), 'A',  '-', 'wp2thlp_clubb')
+    call addfld('WPRTPTHLP_CLUBB', (/ 'ilev' /), 'A',  '-', 'wprtpthlp_clubb')
+    call addfld('WP4_CLUBB', (/ 'ilev' /), 'A',  '-', 'wp4_clubb')
+
+    call addfld('WPRTP2_ZM_CLUBB', (/ 'ilev' /), 'A',  '-', 'wprtp2_zm_clubb')
+    call addfld('WPTHLP2_ZM_CLUBB', (/ 'ilev' /), 'A', '-', 'wpthlp2_zm_clubb')
+    call addfld('WP2RTP_ZM_CLUBB', (/ 'ilev' /), 'A',  '-', 'wp2rtp_zm_clubb')
+    call addfld('WP2THLP_ZM_CLUBB', (/ 'ilev' /), 'A',  '-', 'wp2thlp_zm_clubb')
+    call addfld('WPRTPTHLP_ZM_CLUBB', (/ 'ilev' /), 'A',  '-', 'wprtpthlp_zm_clubb')
+    call addfld('WP3_ZM_CLUBB', (/ 'ilev' /), 'A',  '-', 'wp3_zm_clubb')
+
     !  Initialize statistics, below are dummy variables
     dum1 = 300._r8
     dum2 = 1200._r8
@@ -1435,7 +1450,11 @@ end subroutine clubb_init_cnst
       
 #ifdef CLUBB_SGS
    use hb_diff,                   only: pblintd
-   use scamMOD,                   only: single_column,scm_clubb_iop_name
+   use scamMOD,                   only: single_column,scm_clubb_iop_name, &
+                                        have_wprtp_clasp, wprtp_clasp, &  ! clasp
+                                        have_wpthlp_clasp, wpthlp_clasp, &
+                                        have_upwp_clasp, upwp_clasp, &
+                                        have_vpwp_clasp, vpwp_clasp
    use clubb_api_module, only: &
         nparams, &
         read_parameters_api, &
@@ -1689,6 +1708,36 @@ end subroutine clubb_init_cnst
    integer :: stats_nsamp, stats_nout           ! Stats sampling and output intervals for CLUBB [timestep]
 
    real(r8) :: rtm_integral_1, rtm_integral_update, rtm_integral_forcing, rtm_integral_vtend, rtm_integral_ltend
+
+   ! clasp 
+   real(r8) :: wprtp2_output(pcols,pverp) 
+   real(r8) :: wpthlp2_output(pcols,pverp) 
+   real(r8) :: wp2rtp_output(pcols,pverp) 
+   real(r8) :: wp2thlp_output(pcols,pverp) 
+   real(r8) :: wprtpthlp_output(pcols,pverp) 
+   real(r8) :: wp4_output(pcols,pverp) 
+
+   real(r8) :: wprtp2(pverp) 
+   real(r8) :: wpthlp2(pverp) 
+   real(r8) :: wp2rtp(pverp) 
+   real(r8) :: wp2thlp(pverp) 
+   real(r8) :: wprtpthlp(pverp) 
+   real(r8) :: wp4(pverp) 
+
+   real(r8) :: wprtp2_zm_output(pcols,pverp) 
+   real(r8) :: wpthlp2_zm_output(pcols,pverp) 
+   real(r8) :: wp2rtp_zm_output(pcols,pverp) 
+   real(r8) :: wp2thlp_zm_output(pcols,pverp) 
+   real(r8) :: wprtpthlp_zm_output(pcols,pverp) 
+
+   real(r8) :: wprtp2_zm(pverp) 
+   real(r8) :: wpthlp2_zm(pverp) 
+   real(r8) :: wp2rtp_zm(pverp) 
+   real(r8) :: wp2thlp_zm(pverp) 
+   real(r8) :: wprtpthlp_zm(pverp)  
+
+   real(r8) :: wp3_zm_output(pcols,pverp) 
+   real(r8) :: wp3_zm(pverp)   
 
     ! --------------- !
     ! Pointers        !
@@ -2359,6 +2408,11 @@ end subroutine clubb_init_cnst
       wprtp_sfc  = cam_in%cflx(i,1)/rho_ds_zm(1)            ! Moisture flux  (check rho)
       upwp_sfc   = cam_in%wsx(i)/rho_ds_zm(1)               ! Surface meridional momentum flux
       vpwp_sfc   = cam_in%wsy(i)/rho_ds_zm(1)               ! Surface zonal momentum flux  
+      ! clasp 
+      if (have_wprtp_clasp) wprtp_sfc = wprtp_clasp(1)
+      if (have_wpthlp_clasp) wpthlp_sfc = wpthlp_clasp(1)  
+      if (have_upwp_clasp) upwp_sfc = upwp_clasp(1)
+      if (have_vpwp_clasp) vpwp_sfc = vpwp_clasp(1) 
       
       !  Need to flip arrays around for CLUBB core
       do k=1,nlev+1
@@ -2565,13 +2619,20 @@ end subroutine clubb_init_cnst
             khzm_out, khzt_out, &
             qclvar_out, thlprcp_out, &
             wprcp_out, ice_supersat_frac_out, &
-            rcm_in_layer_out, cloud_cover_out)
+            rcm_in_layer_out, cloud_cover_out, &                            ! intent(out)
+            wp4, wprtp2, wpthlp2, wp2rtp, wp2thlp, wprtpthlp, wp3_zm )      ! clasp 
 
          if ( err_code == clubb_fatal_error ) then
              write(fstderr,*) "Fatal error in CLUBB: at timestep ", get_nstep(), "LAT: ", state1%lat(i), " LON: ", state1%lon(i)
             call endrun(subr//':  Fatal error in CLUBB library')
          end if
 
+         ! clasp 
+         wprtp2_zm=zt2zm_api(wprtp2)
+         wpthlp2_zm=zt2zm_api(wpthlp2)
+         wp2rtp_zm=zt2zm_api(wp2rtp)
+         wp2thlp_zm=zt2zm_api(wp2thlp)
+         wprtpthlp_zm=zt2zm_api(wprtpthlp)
 
          if (do_rainturb) then
             rvm_in = rtm_in - rcm_inout 
@@ -2634,6 +2695,24 @@ end subroutine clubb_init_cnst
       wp2_zt  = zm2zt_api(wp2_in)
 
       !  Arrays need to be "flipped" to CAM grid 
+
+      ! output clasp homs
+      do k=1,pverp
+         wprtp2_output(i,k)    = wprtp2(pverp-k+1)
+         wpthlp2_output(i,k)   = wpthlp2(pverp-k+1)
+         wp2rtp_output(i,k)    = wp2rtp(pverp-k+1)
+         wp2thlp_output(i,k)   = wp2thlp(pverp-k+1)
+         wprtpthlp_output(i,k) = wprtpthlp(pverp-k+1)
+         wp4_output(i,k)      = wp4(pverp-k+1)
+
+         wprtp2_zm_output(i,k)    = wprtp2_zm(pverp-k+1)
+         wpthlp2_zm_output(i,k)   = wpthlp2_zm(pverp-k+1)
+         wp2rtp_zm_output(i,k)    = wp2rtp_zm(pverp-k+1)
+         wp2thlp_zm_output(i,k)   = wp2thlp_zm(pverp-k+1)
+         wprtpthlp_zm_output(i,k) = wprtpthlp_zm(pverp-k+1)
+
+         wp3_zm_output(i, k) = wp3_zm(pverp-k+1)
+      enddo 
 
       do k=1,nlev+1
      
@@ -3460,6 +3539,22 @@ end subroutine clubb_init_cnst
      call outfld( 'edmf_thlflx'   , mf_thlflx_output,          pcols, lchnk )
      call outfld( 'edmf_qtflx'    , mf_qtflx_output,           pcols, lchnk )
    end if
+
+   ! clasp 
+   call outfld('WPRTP2_CLUBB', wprtp2_output, pcols, lchnk)
+   call outfld('WPTHLP2_CLUBB', wpthlp2_output, pcols, lchnk)
+   call outfld('WP2RTP_CLUBB', wp2rtp_output, pcols, lchnk)
+   call outfld('WP2THLP_CLUBB', wp2thlp_output, pcols, lchnk)
+   call outfld('WPRTPTHLP_CLUBB', wprtpthlp_output, pcols, lchnk)
+   call outfld('WP4_CLUBB', wp4_output, pcols, lchnk)
+
+   call outfld('WPRTP2_ZM_CLUBB', wprtp2_zm_output, pcols, lchnk)
+   call outfld('WPTHLP2_ZM_CLUBB', wpthlp2_zm_output, pcols, lchnk)
+   call outfld('WP2RTP_ZM_CLUBB', wp2rtp_zm_output, pcols, lchnk)
+   call outfld('WP2THLP_ZM_CLUBB', wp2thlp_zm_output, pcols, lchnk)
+   call outfld('WPRTPTHLP_ZM_CLUBB', wprtpthlp_zm_output, pcols, lchnk)
+   
+   call outfld('WP3_ZM_CLUBB', wp3_zm_output, pcols, lchnk)
 
    !  Output CLUBB history here
    if (l_stats) then 

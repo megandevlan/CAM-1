@@ -22,7 +22,7 @@ module getinterpnetcdfdata
 contains
 
 subroutine getinterpncdata( NCID, camlat, camlon, TimeIdx, &
-   varName, have_surfdat, surfdat, fill_ends, &
+   varName, have_surfdat, surfdat, fill_ends, swaplevs, &
    press, npress, ps, outData, STATUS )
 
 !     getinterpncdata: extracts the entire level dimension for a 
@@ -43,10 +43,11 @@ subroutine getinterpncdata( NCID, camlat, camlon, TimeIdx, &
    integer, intent(in)  :: TimeIdx       ! time index
    real(r8), intent(in) :: camlat,camlon ! target lat and lon to be extracted  
    logical, intent(in)  :: have_surfdat  ! is surfdat provided
-   logical, intent(in)  :: fill_ends ! extrapolate the end values
+   logical, intent(in)  :: fill_ends     ! extrapolate the end values
+   logical, intent(in)  :: swaplevs      ! swap levs bot-top
    integer, intent(in)  :: npress        ! number of dataset pressure levels
    real(r8), intent(in) :: press(npress) ! dataset pressure levels
-   real(r8), intent(in) :: ps ! dataset pressure levels
+   real(r8), intent(in) :: ps ! dataset surface pressure
 
 !     ---------- outputs ----------
 
@@ -185,6 +186,8 @@ subroutine getinterpncdata( NCID, camlat, camlon, TimeIdx, &
       return
    endif
 
+   if (swaplevs) tmp(1:nlev)=tmp(nlev:1:-1)
+   
    if ( nlev .eq. 1 ) then
       outdata(1) = tmp(1)
       return                 ! no need to do interpolation 

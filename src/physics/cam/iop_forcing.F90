@@ -9,6 +9,10 @@
   ! ----------------------------------------------- !
 
   use shr_kind_mod, only: r8 => shr_kind_r8
+  use scamMod,      only : scm_iop_sflx, have_sflx, sflxobs,have_Tg, &
+                           have_lwupsrf,have_shflx,have_lhflx,have_evap ,have_tsair, &
+                           have_qref,scm_iop_land_srf,lwupsrfobs,evapobs, &
+                           lhflxobs, shflxobs,have_uref_clasp,uref_clasp,have_vref_clasp,vref_clasp
   implicit none
   private  
 
@@ -47,13 +51,27 @@
         do c = begchunk, endchunk
            ncol = cam_in(c)%ncol
            if( have_lhflx ) then
-               cam_in(c)%lhf(1)    = lhflxobs(1)
-               cam_in(c)%cflx(1,1) = lhflxobs(1) / latvap
+              cam_in(c)%lhf(1)    = lhflxobs(1)
+              if (have_evap) then
+                 cam_in(c)%cflx(1,1) = evapobs(1)
+              else
+                 cam_in(c)%cflx(1,1) = lhflxobs(1) / latvap
+              end if
            endif
            if( have_shflx ) cam_in(c)%shf(1) = shflxobs(1)
            if( have_Tg ) then
                cam_in(c)%ts(1)   = tground(1)
-               cam_in(c)%lwup(1) = stebol * tground(1)**4
+              if (have_evap) then
+                 cam_in(c)%cflx(1,1) = evapobs(1)
+              else
+                 cam_in(c)%cflx(1,1) = lhflxobs(1) / latvap
+              end if
+
+              if( have_lwupsrf ) then
+                 cam_in(c)%lwup(1)  = lwupsrfobs(1)
+              else
+                 cam_in(c)%lwup(1) = stebol * tground(1)**4
+              endif
            endif
         end do
     endif
@@ -63,11 +81,29 @@
            ncol = cam_in(c)%ncol
            if( have_Tg ) then
                cam_in(c)%ts(1) = tground(1)
-               cam_in(c)%lwup(1) = stebol * tground(1)**4
+               if( have_lwupsrf ) then
+                  cam_in(c)%lwup(1)  = lwupsrfobs(1)
+               else
+                  cam_in(c)%lwup(1) = stebol * tground(1)**4
+               endif
            endif
         end do
     endif
 
+    if( scm_iop_land_srf ) then
+        do c = begchunk, endchunk
+           ncol = cam_in(c)%ncol
+           if( have_Tg )         cam_in(c)%ts(1)    = tground(1)
+           if( have_lwupsrf )    cam_in(c)%lwup(1)  = lwupsrfobs(1)
+           if( have_shflx )      cam_in(c)%shf(1)   = shflxobs(1)
+           if( have_lhflx )      cam_in(c)%lhf(1)   = lhflxobs(1)
+           if( have_evap )       cam_in(c)%cflx(1,1)  = evapobs(1)
+           if( have_tsair )      cam_in(c)%tref(1)  = tsair(1)
+           if( have_qref )       cam_in(c)%qref(1)  = qrefobs(1)
+           if( have_uref_clasp ) cam_in(c)%u10(1)   = uref_clasp(1)
+        end do
+    endif
+    
   end subroutine scam_use_iop_srf
 
   subroutine scam_set_iop_Tg( cam_out )
@@ -100,7 +136,6 @@
   ! -------------------------------------------- !
   ! USE the SCAM-IOP specified surface emissions !
   ! -------------------------------------------- !
-    use scamMod,             only : scm_iop_sflx, have_sflx, sflxobs
     use constituents,        only : pcnst
     use mo_gas_phase_chemdr, only : map2chm
 
