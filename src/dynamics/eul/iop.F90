@@ -31,14 +31,14 @@ module iop
                               cldiceobs,  cldliqobs, cldobs, clwpobs, divu, &
                               divu3d, divv, divv3d, iopfile, lhflxobs, numiceobs, numliqobs, &
                               precobs, evapobs, q1obs, q2obs, scmlat, scmlon, shflxobs, tsair, qrefobs, have_omega, wfldh,qinitobs,sflxobs, &
-                              have_wpqtpsfc_clasp, have_wpthlpsfc_clasp, have_qp2, have_thlp2_clasp, have_thlpqp_clasp, have_wp2_clasp, &
-                              have_wp4_clasp, have_wp2thetap_clasp, have_wp2qp_clasp, have_wpqp2_clasp, have_wpthetap2_clasp, &
-                              have_wpthetapqp_clasp, have_wp3_clasp, have_upwp_clasp, have_uref_clasp, have_vref_clasp, have_vpwp_clasp, have_tsoil, have_lwupsrf, &
+                              have_wpqtpsfc_clasp, have_wpthlpsfc_clasp, have_qp2, have_rtp2_clasp, have_thlp2_clasp, have_rtpthlp_clasp, have_wp2_clasp, &
+                              have_wp4_clasp, have_wp2thlp_clasp, have_wp2rtp_clasp, have_wprtp2_clasp, have_wpthlp2_clasp, &
+                              have_wprtpthlp_clasp, have_wp3_clasp, have_upwp_clasp, have_uref_clasp, have_vref_clasp, have_vpwp_clasp, have_tsoil, have_lwupsrf, &
                               have_lwdnsrf, have_swupsrf, have_swdnsrf, &
-                              lwdnsrfobs ,lwupsrfobs ,qp2obs ,swdnsrfobs ,swupsrfobs ,thlp2_clasp, &
-                              thlpqp_clasp ,tsoilobs,upwp_clasp,vpwp_clasp,wp2_clasp ,wp2qp_clasp, &
-                              wp2thetap_clasp,wp3_clasp ,wp4_clasp ,wpqp2_clasp,wpqtpsfc_clasp,wpthetap2_clasp, &
-                              wpthetapqp_clasp ,wpthlpsfc_clasp,uref_clasp,vref_clasp
+                              lwdnsrfobs ,lwupsrfobs ,qp2obs ,swdnsrfobs ,swupsrfobs ,thlp2_clasp, rtp2_clasp, &
+                              rtpthlp_clasp ,tsoilobs,upwp_clasp,vpwp_clasp,wp2_clasp ,wp2rtp_clasp, &
+                              wp2thlp_clasp,wp3_clasp ,wp4_clasp ,wprtp2_clasp,wpqtpsfc_clasp,wpthlp2_clasp, &
+                              wprtpthlp_clasp ,wpthlpsfc_clasp,uref_clasp,vref_clasp
   
 
   use shr_kind_mod,     only: r8 => shr_kind_r8, max_chars=>shr_kind_cl
@@ -1288,6 +1288,9 @@ integer, optional, intent(in) :: timelevel
    else
       call wrap_get_vara_realx (ncid,varid,strt4,cnt4,qp2obs)
       have_qp2 = .true.
+      ! MDF: use CLASP variables as well 
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,rtp2_clasp)
+      have_rtp2_clasp = .true.
    endif
 
    ! read thlp2 (K2)
@@ -1297,15 +1300,18 @@ integer, optional, intent(in) :: timelevel
    else
       call wrap_get_vara_realx (ncid,varid,strt4,cnt4,thlp2_clasp)
       have_thlp2_clasp = .true.
+      ! MDF: Write statment to log file
+      write(iulog,*) 'Using CLASP thlp2 values.'
+      ! End MDF addition
    endif
 
    ! read thlpqp (Kkg\\kg)
    status = nf90_inq_varid( ncid, 'thlpqp', varid   )
    if ( status .ne. nf90_noerr ) then
-      have_thlpqp_clasp = .false.
+      have_rtpthlp_clasp = .false.
    else
-      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,thlpqp_clasp)
-      have_thlpqp_clasp = .true.
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,rtpthlp_clasp)
+      have_rtpthlp_clasp = .true.
    endif
 
    ! read wp2 (Kkg\\kg)
@@ -1329,46 +1335,55 @@ integer, optional, intent(in) :: timelevel
    ! read wp2thetap (Km2\\s2)
    status = nf90_inq_varid( ncid, 'wp2thetap', varid   )
    if ( status .ne. nf90_noerr ) then
-      have_wp2thetap_clasp = .false.
+      have_wp2thlp_clasp = .false.
    else
-      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,wp2thetap_clasp)
-      have_wp2thetap_clasp = .true.
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,wp2thlp_clasp)
+      have_wp2thlp_clasp = .true.
+      ! MDF: Write statment to log file
+      write(iulog,*) 'Using CLASP wp2thlp values.'
+      ! End MDF addition
    endif
 
    ! read wp2qp (kg\\kg)(m2\\s2)
    status = nf90_inq_varid( ncid, 'wp2qp', varid   )
    if ( status .ne. nf90_noerr ) then
-      have_wp2qp_clasp = .false.
+      have_wp2rtp_clasp = .false.
    else
-      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,wp2qp_clasp)
-      have_wp2qp_clasp = .true.
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,wp2rtp_clasp)
+      have_wp2rtp_clasp = .true.
    endif
 
    ! read wpqp2 (kg2\\kg2)(m\\s)
    status = nf90_inq_varid( ncid, 'wpqp2', varid   )
    if ( status .ne. nf90_noerr ) then
-      have_wpqp2_clasp = .false.
+      have_wprtp2_clasp = .false.
    else
-      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,wpqp2_clasp)
-      have_wpqp2_clasp = .true.
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,wprtp2_clasp)
+      have_wprtp2_clasp = .true.
+      ! MDF: Write statment to log file
+      write(iulog,*) 'Using CLASP wpqp2 values.'
+      ! End MDF addition
    endif
 
    ! read wpthetap2 (K2\\K2)(m\\s)
    status = nf90_inq_varid( ncid, 'wpthetap2', varid   )
    if ( status .ne. nf90_noerr ) then
-      have_wpthetap2_clasp = .false.
+      have_wpthlp2_clasp = .false.
    else
-      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,wpthetap2_clasp)
-      have_wpthetap2_clasp = .true.
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,wpthlp2_clasp)
+      have_wpthlp2_clasp = .true.
+      ! MDF: Write statment to log file
+      write(iulog,*) 'Using CLASP wpthlp2 values.'
+      ! End MDF addition
    endif
 
    ! read wpthetapqp (Kmkg\\skg)
    status = nf90_inq_varid( ncid, 'wpthetapqp', varid   )
    if ( status .ne. nf90_noerr ) then
-      have_wpthetapqp_clasp = .false.
+      have_wprtpthlp_clasp = .false.
    else
-      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,wpthetapqp_clasp)
-      have_wpthetapqp_clasp = .true.
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,wprtpthlp_clasp)
+      have_wprtpthlp_clasp = .true.
    endif
 
    ! read wp3 (m3\\s3)
