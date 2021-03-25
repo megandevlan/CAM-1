@@ -19,18 +19,28 @@ module iop
   use phys_control,     only: phys_getopts
   use pmgrid,           only: beglat,endlat,plon,plev,plevp
   use prognostics,      only: n3,t3,q3,u3,v3,ps
-  use scamMod,          only: use_camiop, ioptimeidx, have_ps, scm_backfill_iop_w_init, have_tsair, &
+  use scamMod,          only: use_camiop, ioptimeidx, have_ps, scm_backfill_iop_w_init, have_tsair, have_qref, &
                               tobs, have_t, tground, have_tg, qobs, have_q, have_cld,    &
                               have_clwp, divq, have_divq, vertdivq, have_vertdivq, divq3d, &
                               have_divq3d, dqfxcam, have_numliq, have_cldliq, have_cldice, &
                               have_numice, have_divu, have_divv, divt, have_divt, vertdivt, &
                               have_vertdivt, divt3d, have_divt3d, have_divu3d,  have_divv3d, &
                               have_ptend, ptend, wfld, uobs, have_u, uobs, vobs, have_v, &
-                              vobs, have_prec, have_q1, have_q2, have_lhflx, have_shflx, &
+                              vobs, have_prec, have_evap, have_q1, have_q2, have_lhflx, have_shflx, have_sflx, &
                               use_3dfrc, betacam, fixmascam, alphacam, doiopupdate, &
                               cldiceobs,  cldliqobs, cldobs, clwpobs, divu, &
                               divu3d, divv, divv3d, iopfile, lhflxobs, numiceobs, numliqobs, &
-                              precobs, q1obs, scmlat, scmlon, shflxobs, tsair, have_omega, wfldh,qinitobs
+                              precobs, evapobs, q1obs, q2obs, scmlat, scmlon, shflxobs, tsair, qrefobs, have_omega, wfldh,qinitobs,sflxobs, &
+                              have_wpqtpsfc_clasp, have_wpthlpsfc_clasp, have_qp2, have_rtp2_clasp, have_thlp2_clasp, have_rtpthlp_clasp, have_wp2_clasp, &
+                              have_wp4_clasp, have_wp2thlp_clasp, have_wp2rtp_clasp, have_wprtp2_clasp, have_wpthlp2_clasp, &
+                              have_wprtpthlp_clasp, have_wp3_clasp, have_upwp_clasp, have_uref_clasp, have_vref_clasp, have_vpwp_clasp, have_tsoil, have_lwupsrf, &
+                              have_lwdnsrf, have_swupsrf, have_swdnsrf, &
+                              lwdnsrfobs ,lwupsrfobs ,qp2obs ,swdnsrfobs ,swupsrfobs ,thlp2_clasp, rtp2_clasp, &
+                              rtpthlp_clasp ,tsoilobs,upwp_clasp,vpwp_clasp,wp2_clasp ,wp2rtp_clasp, &
+                              wp2thlp_clasp,wp3_clasp ,wp4_clasp ,wprtp2_clasp,wpqtpsfc_clasp,wpthlp2_clasp, &
+                              wprtpthlp_clasp ,wpthlpsfc_clasp,uref_clasp,vref_clasp
+  
+
   use shr_kind_mod,     only: r8 => shr_kind_r8, max_chars=>shr_kind_cl
   use shr_scam_mod,     only: shr_scam_GetCloseLatLon
   use spmd_utils,       only: masterproc
@@ -149,6 +159,9 @@ subroutine readiopdata(timelevel)
         use shr_sys_mod,         only: shr_sys_flush
 	use hycoef,              only: hyam, hybm
         use error_messages,      only: handle_ncerr
+        use mo_chem_utls,        only : get_spc_ndx
+        use mo_gas_phase_chemdr, only : map2chm
+        use constituents,        only : sflxnam
 !-----------------------------------------------------------------------
    implicit none
 #if ( defined RS6000 )
@@ -174,12 +187,13 @@ integer, optional, intent(in) :: timelevel
 
    integer bdate, ntime,nstep
    integer, allocatable :: tsec(:)
-   integer k, m
+   integer k, m, n
    integer icldliq,icldice
    integer inumliq,inumice,idx
 
    logical have_srf              ! value at surface is available
    logical fill_ends             ! 
+   logical swaplevs              ! 
    logical have_cnst(pcnst)
    real(r8) dummy
    real(r8) lat,xlat
@@ -193,10 +207,13 @@ integer, optional, intent(in) :: timelevel
    real(r8), allocatable :: dplevs( : )
    integer strt4(4),cnt4(4),strt5(4),cnt5(4)
    character(len=16) :: lowername
+   character(len=16) :: varname
    character(len=max_chars) :: units ! Units
+   integer h2o_ndx
 
    nstep = get_nstep()
    fill_ends= .false.
+   swaplevs = .false.
 
    if (present(timelevel)) then
       ntimelevel=timelevel
@@ -226,13 +243,12 @@ integer, optional, intent(in) :: timelevel
 
 
    status = nf90_inq_dimid (ncid, 'time', time_dimID )
+   if (status /= NF90_NOERR) status = nf90_inq_dimid (ncid, 'tsec', time_dimID )
+   if (status /= NF90_NOERR) status = nf90_inq_dimid (ncid, 'time_offset', time_dimID )
    if (status /= NF90_NOERR) then
-      status = nf90_inq_dimid (ncid, 'tsec', time_dimID )
-      if (status /= NF90_NOERR) then
-         if (masterproc) write(iulog,*) sub//':ERROR - readiopdata.F:Could not find dimension ID for time/tsec'
-         status = NF90_CLOSE ( ncid )
-         call endrun
-      end if
+      if (masterproc) write(iulog,*) sub//':ERROR - readiopdata.F:Could not find dimension ID for time/tsec'
+      status = NF90_CLOSE ( ncid )
+      call endrun
    end if
 
    call handle_ncerr( nf90_inquire_dimension( ncid, time_dimID, len=ntime ),&
@@ -241,21 +257,27 @@ integer, optional, intent(in) :: timelevel
    allocate(tsec(ntime))
 
    status = nf90_inq_varid (ncid, 'tsec', tsec_varID )
-   call handle_ncerr( nf90_get_var (ncid, tsec_varID, tsec),&
-           'readiopdata.F90', __LINE__)
-   
-   status = nf90_inq_varid (ncid, 'nbdate', bdate_varID )
+   if (status /= NF90_NOERR) status = nf90_inq_varid (ncid, 'time_offset', tsec_varID )
+      
    if (status /= NF90_NOERR) then
-      status = nf90_inq_varid (ncid, 'bdate', bdate_varID )
-      if (status /= NF90_NOERR) then
-         if (masterproc) write(iulog,*) sub//':ERROR - readiopdata.F:Could not find variable ID for bdate'
-         status = NF90_CLOSE ( ncid )
-         call endrun
-      end if
+      if (masterproc) write(iulog,*) sub//':ERROR - readiopdata.F:Could not find variable ID for tsec'
+      status = NF90_CLOSE ( ncid )
+      call endrun
+   else
+      call handle_ncerr( nf90_get_var (ncid, tsec_varID, tsec),&
+           'readiopdata.F90', __LINE__)
    end if
-   call handle_ncerr( nf90_get_var (ncid, bdate_varID, bdate),&
-        'readiopdata.F90', __LINE__)
 
+   status = nf90_inq_varid (ncid, 'nbdate', bdate_varID )
+   if (status /= NF90_NOERR) status = nf90_inq_varid (ncid, 'bdate', bdate_varID )      
+   if (status /= NF90_NOERR) then
+      if (masterproc) write(iulog,*) sub//':ERROR - readiopdata.F:Could not find variable ID for bdate'
+      status = NF90_CLOSE ( ncid )
+      call endrun
+   else
+      call handle_ncerr( nf90_get_var (ncid, bdate_varID, bdate),&
+           'readiopdata.F90', __LINE__)
+   end if
 !     
 !======================================================
 !     read level data
@@ -281,6 +303,10 @@ integer, optional, intent(in) :: timelevel
 
    call handle_ncerr( nf90_get_var (ncid, lev_varID, dplevs(:nlev)),&
                     'readiopdata.F90', __LINE__)
+   if (dplevs(1)-dplevs(nlev)>0._r8) then
+      swaplevs=.true.
+      dplevs(1:nlev)=dplevs(nlev:1:-1)
+   end if
 !
 !CAM generated forcing already has pressure on millibars convert standard IOP if needed.
 !
@@ -322,6 +348,7 @@ integer, optional, intent(in) :: timelevel
    cnt4(4)  = 1
 
    status = nf90_inq_varid( ncid, 'Ps', varid   )
+   if ( status .ne. nf90_noerr ) status = nf90_inq_varid( ncid, 'p_srf_center', varid   )
    if ( status .ne. nf90_noerr ) then
       have_ps = .false.
       if (masterproc) write(iulog,*) sub//':Could not find variable Ps'
@@ -334,8 +361,14 @@ integer, optional, intent(in) :: timelevel
    else
       status = nf90_get_var(ncid, varid, ps(1,1,ntimelevel), strt4)
       have_ps = .true.
+      call handle_ncerr(nf90_inquire_attribute(ncid, varid, 'units', len=u_attlen),&
+                    'readiopdata.F90', __LINE__)
+      call handle_ncerr(nf90_get_att(ncid, varid, 'units', units),&
+                    'readiopdata.F90', __LINE__)
+      units=trim(to_lower(units(1:u_attlen)))
+      ! convert ps to pascals if needed.
+      if ( units=='mb'.or. units=='millibars' ) ps(1,1,ntimelevel)=ps(1,1,ntimelevel)*100._r8
    endif
-
 
 !  If the IOP dataset has hyam,hybm,etc it is assumed to be a hybrid level
 !  dataset.
@@ -372,11 +405,24 @@ integer, optional, intent(in) :: timelevel
 
 
    status =  nf90_inq_varid( ncid, 'Tsair', varid   )
+   if ( status .ne. nf90_noerr ) status =  nf90_inq_varid( ncid, 'T_srf', varid   )
    if ( status .ne. nf90_noerr ) then
       have_tsair = .false.
    else
       call wrap_get_vara_realx (ncid,varid,strt4,cnt4,tsair)
       have_tsair = .true.
+      call handle_ncerr(nf90_inquire_attribute(ncid, varid, 'units', len=u_attlen),&
+           'readiopdata.F90', __LINE__)
+      call handle_ncerr(nf90_get_att(ncid, varid, 'units', units),&
+           'readiopdata.F90', __LINE__)
+      units=trim(to_lower(units(1:u_attlen)))
+
+      if ( units=='c' .or. units=='celsius' ) then
+         !
+         !     convert celsius to kelvin
+         !
+         tsair=tsair+273.15_r8
+      endif
    endif
 
 !
@@ -385,16 +431,15 @@ integer, optional, intent(in) :: timelevel
 !
 
    tobs(:)= t3(1,:,1,ntimelevel)
-
-   if ( use_camiop ) then
-     call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx,'t', have_tsair, &
-          tsair(1), fill_ends, &
-          dplevs, nlev,ps(1,1,ntimelevel),tobs, status )
-   else
-     call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx,'T', have_tsair, &
-          tsair(1), fill_ends, &
-          dplevs, nlev,ps(1,1,ntimelevel), tobs, status )
-   endif
+   
+   varname='t'
+   status =  nf90_inq_varid( ncid, 't', varid   )
+   if ( status .eq. nf90_noerr ) varname='t'
+   status =  nf90_inq_varid( ncid, 'T', varid   )
+   if ( status .eq. nf90_noerr ) varname='T'
+   call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx,trim(varname), have_tsair, &
+        tsair(1), fill_ends, swaplevs, &
+        dplevs, nlev,ps(1,1,ntimelevel),tobs, status )
    if ( status .ne. nf90_noerr ) then
       have_t = .false.
       if (masterproc) write(iulog,*) sub//':Could not find variable T'
@@ -409,9 +454,24 @@ integer, optional, intent(in) :: timelevel
 !     
    else
       have_t = .true.
+      status =  nf90_inq_varid( ncid, trim(varname), varid   )
+      call handle_ncerr(nf90_inquire_attribute(ncid, varid, 'units', len=u_attlen),&
+           'readiopdata.F90', __LINE__)
+      call handle_ncerr(nf90_get_att(ncid, varid, 'units', units),&
+           'readiopdata.F90', __LINE__)
+      units=trim(to_lower(units(1:u_attlen)))
+      
+      if ( units=='c' .or. units=='celsius' ) then
+         !
+         !     convert celsius to kelvin
+         !
+         tobs=tobs+273.15_r8
+      endif
+      
    endif
 
    status = nf90_inq_varid( ncid, 'Tg', varid   )
+   if ( status .ne. nf90_noerr ) status =  nf90_inq_varid( ncid, 'T_skin', varid   )
    if (status .ne. nf90_noerr) then
       if (masterproc) write(iulog,*) sub//':Could not find variable Tg on IOP dataset'
       if ( have_tsair ) then
@@ -426,15 +486,42 @@ integer, optional, intent(in) :: timelevel
    else
       call wrap_get_vara_realx (ncid,varid,strt4,cnt4,tground)
       have_Tg = .true.
+      call handle_ncerr(nf90_inquire_attribute(ncid, varid, 'units', len=u_attlen),&
+           'readiopdata.F90', __LINE__)
+      call handle_ncerr(nf90_get_att(ncid, varid, 'units', units),&
+           'readiopdata.F90', __LINE__)
+      units=trim(to_lower(units(1:u_attlen)))
+      
+      if ( units=='c' .or. units=='celsius' ) then
+         !
+         !     convert celsius to kelvin
+         !
+         tground=tground+273.15_r8
+      endif
+
    endif
 
    status = nf90_inq_varid( ncid, 'qsrf', varid   )
+   if ( status .ne. nf90_noerr ) status =  nf90_inq_varid( ncid, 'q_srf', varid   )
 
    if ( status .ne. nf90_noerr ) then
-      have_srf = .false.
+      have_qref = .false.
    else
-      status = nf90_get_var(ncid, varid, srf(1), strt4)
-      have_srf = .true.
+      status = nf90_get_var(ncid, varid, qrefobs(1), strt4)
+      have_qref = .true.
+      call handle_ncerr(nf90_inquire_attribute(ncid, varid, 'units', len=u_attlen),&
+           'readiopdata.F90', __LINE__)
+      call handle_ncerr(nf90_get_att(ncid, varid, 'units', units),&
+           'readiopdata.F90', __LINE__)
+      units=trim(to_lower(units(1:u_attlen)))
+      
+      if ( units=='g/kg' ) then
+         !
+         !     convert to kg/kg
+         !
+         qrefobs(1)=qrefobs(1)/1000._r8
+      endif
+
    endif
 
    if (is_first_step()) then
@@ -443,8 +530,8 @@ integer, optional, intent(in) :: timelevel
 
    qobs(:)= q3(1,:,1,1,ntimelevel)
 
-   call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx,  'q', have_srf, &
-      srf(1), fill_ends, &
+   call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx,  'q', have_qref, &
+      qrefobs(1), fill_ends, swaplevs, &
       dplevs, nlev,ps(1,1,ntimelevel), qobs, status )
    if ( status .ne. nf90_noerr ) then
       have_q = .false.
@@ -457,11 +544,25 @@ integer, optional, intent(in) :: timelevel
       endif
    else
       have_q = .true.
+      status =  nf90_inq_varid( ncid, 'q', varid   )
+      call handle_ncerr(nf90_inquire_attribute(ncid, varid, 'units', len=u_attlen),&
+           'readiopdata.F90', __LINE__)
+      call handle_ncerr(nf90_get_att(ncid, varid, 'units', units),&
+           'readiopdata.F90', __LINE__)
+      units=trim(to_lower(units(1:u_attlen)))
+      
+      if ( units=='g/kg' ) then
+         !
+         !     convert to kg/kg
+         !
+         qobs=qobs/1000._r8
+      endif
+
    endif
 
    cldobs = 0._r8
    call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx,  'cld', .false., &
-      dummy, fill_ends, dplevs, nlev,ps(1,1,ntimelevel), cldobs, status )
+      dummy, fill_ends, swaplevs, dplevs, nlev,ps(1,1,ntimelevel), cldobs, status )
    if ( status .ne. nf90_noerr ) then
       have_cld = .false.
    else
@@ -470,7 +571,7 @@ integer, optional, intent(in) :: timelevel
    
    clwpobs = 0._r8
    call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx,  'clwp', .false., &
-      dummy, fill_ends, dplevs, nlev,ps(1,1,ntimelevel), clwpobs, status )
+      dummy, fill_ends, swaplevs, dplevs, nlev,ps(1,1,ntimelevel), clwpobs, status )
    if ( status .ne. nf90_noerr ) then
       have_clwp = .false.
    else
@@ -483,20 +584,48 @@ integer, optional, intent(in) :: timelevel
    status = nf90_inq_varid( ncid, 'divqsrf', varid   )
    if ( status .ne. nf90_noerr ) then
       have_srf = .false.
+      srf=0._r8
    else
       status = nf90_get_var(ncid, varid, srf(1), strt4)
       have_srf = .true.
    endif
 
    divq(:,:)=0._r8
+   varname='divq'
+   status =  nf90_inq_varid( ncid, 'divq', varid   )
+   if ( status .eq. nf90_noerr ) varname='divq'
+   status =  nf90_inq_varid( ncid, 'q_adv_h', varid   )
+   if ( status .eq. nf90_noerr ) varname='q_adv_h'
 
    call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx, &
-        'divq', have_srf, srf(1), fill_ends, &
+        trim(varname), have_srf, srf(1), fill_ends, swaplevs, &
         dplevs, nlev,ps(1,1,ntimelevel), divq(:,1), status )
    if ( status .ne. nf90_noerr ) then
       have_divq = .false.
    else
       have_divq = .true.
+      status =  nf90_inq_varid( ncid, trim(varname), varid   )
+      call handle_ncerr(nf90_inquire_attribute(ncid, varid, 'units', len=u_attlen),&
+           'readiopdata.F90', __LINE__)
+      call handle_ncerr(nf90_get_att(ncid, varid, 'units', units),&
+           'readiopdata.F90', __LINE__)
+      units=trim(to_lower(units(1:u_attlen)))
+      select case (trim(units))
+      case ('kg/kg/s') ! this is what we want
+      case ('g/kg/s')
+         divq(:,1)=divq(:,1)/1000._r8
+      case ('kg/kg/h')
+         divq(:,1)=divq(:,1)/3600._r8
+      case ('kg/kg/hour')
+         divq(:,1)=divq(:,1)/3600._r8
+      case ('g/kg/hr')
+         divq(:,1)=divq(:,1)/1000._r8/3600._r8
+      case ('g/kg/hour')
+         divq(:,1)=divq(:,1)/1000._r8/3600._r8
+      case default
+         call endrun(sub//':ERROR - no conversion for units of q horizontal advection term given:'//trim(units)//' need kg/kg/s')
+      end select
+
    endif
 
 !
@@ -505,6 +634,7 @@ integer, optional, intent(in) :: timelevel
    status = nf90_inq_varid( ncid, 'vertdivqsrf', varid   )
    if ( status .ne. nf90_noerr ) then
       have_srf = .false.
+      srf=0._r8
    else
       status = nf90_get_var(ncid, varid, srf(1), strt4)
       have_srf = .true.
@@ -512,33 +642,50 @@ integer, optional, intent(in) :: timelevel
 
    vertdivq=0._r8
 
-   call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx, 'vertdivq', &
-        have_srf, srf(1), fill_ends, &
+   varname='vertdivq'
+   status =  nf90_inq_varid( ncid, 'vertdivq', varid   )
+   if ( status .eq. nf90_noerr ) varname='vertdivq'
+   status =  nf90_inq_varid( ncid, 'q_adv_v', varid   )
+   if ( status .eq. nf90_noerr ) varname='q_adv_v'
+   call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx, trim(varname), &
+        have_srf, srf(1), fill_ends, swaplevs, &
         dplevs, nlev,ps(1,1,ntimelevel), vertdivq(:,1), status )
    if ( status .ne. nf90_noerr ) then
       have_vertdivq = .false.
    else
       have_vertdivq = .true.
+      status =  nf90_inq_varid( ncid, trim(varname), varid   )
+      call handle_ncerr(nf90_inquire_attribute(ncid, varid, 'units', len=u_attlen),&
+           'readiopdata.F90', __LINE__)
+      call handle_ncerr(nf90_get_att(ncid, varid, 'units', units),&
+           'readiopdata.F90', __LINE__)
+      units=trim(to_lower(units(1:u_attlen)))
+      select case (trim(units))
+      case ('kg/kg/s') ! this is what we want
+      case ('g/kg/s')
+         vertdivq(:,1)=vertdivq(:,1)/1000._r8
+      case ('kg/kg/hr')
+         vertdivq(:,1)=vertdivq(:,1)/3600._r8
+      case ('kg/kg/hour')
+         vertdivq(:,1)=vertdivq(:,1)/3600._r8
+      case ('g/kg/hr')
+         vertdivq(:,1)=vertdivq(:,1)/1000._r8/3600._r8
+      case ('g/kg/hour')
+         vertdivq(:,1)=vertdivq(:,1)/1000._r8/3600._r8
+      case default
+         call endrun(sub//':ERROR - no conversion for units of q vertical advection term given:'//trim(units)//' need kg/kg/s')
+      end select
    endif
-
-   status = nf90_inq_varid( ncid, 'vertdivqsrf', varid   )
-   if ( status .ne. nf90_noerr ) then
-      have_srf = .false.
-   else
-      status = nf90_get_var(ncid, varid, srf(1), strt4)
-      have_srf = .true.
-   endif
-
 
 !
 !   add calls to get dynamics tendencies for all prognostic consts
 !
    divq3d=0._r8
-
+   srf=0._r8
    do m = 1, pcnst
 
       call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx, trim(cnst_name(m))//'_dten', &
-      have_srf, srf(1), fill_ends, &
+      .false., srf(1), fill_ends, swaplevs, &
       dplevs, nlev,ps(1,1,ntimelevel), divq3d(:,m), status )
       if ( status .ne. nf90_noerr ) then
          have_cnst(m) = .false.
@@ -550,7 +697,7 @@ integer, optional, intent(in) :: timelevel
       
       coldata = 0._r8
       call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx, trim(cnst_name(m))//'_dqfx', &
-      have_srf, srf(1), fill_ends, &
+      .false., srf(1), fill_ends, swaplevs, &
       dplevs, nlev,ps(1,1,ntimelevel), coldata, status )
       if ( STATUS .NE. NF90_NOERR ) then
          dqfxcam(1,:,m)=0._r8
@@ -560,7 +707,7 @@ integer, optional, intent(in) :: timelevel
 
       tmpdata = 0._r8
       call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx, trim(cnst_name(m))//'_alph', &
-      have_srf, srf(1), fill_ends, &
+      .false., srf(1), fill_ends, swaplevs, &
       dplevs, nlev,ps(1,1,ntimelevel), tmpdata, status )
       if ( status .ne. nf90_noerr ) then
 !         have_cnst(m) = .false.
@@ -571,14 +718,30 @@ integer, optional, intent(in) :: timelevel
       endif
 
    end do
-
+!  read surface emissions
+   h2o_ndx   = get_spc_ndx('H2O')
+   do m = 1,pcnst
+      n = map2chm(m)
+      if ( n /= h2o_ndx .and. n > 0 ) then
+         tmpdata = 0._r8
+         status =  nf90_inq_varid( ncid, trim(sflxnam(m)), varid   )
+         if ( status .ne. nf90_noerr ) then
+            have_sflx(m) = .false.
+         else
+            status = nf90_get_var(ncid, varid, srf(1), strt4)
+            have_sflx(m) = .true.
+            sflxobs(m)=srf(1)
+         endif
+      endif
+   end do
 
    numliqobs = 0._r8
    call cnst_get_ind('NUMLIQ', inumliq, abort=.false.)
    if ( inumliq > 0 ) then
       have_srf = .false.
+      srf=0._r8
       call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx, 'NUMLIQ', &
-           have_srf, srf(1), fill_ends, &
+           have_srf, srf(1), fill_ends, swaplevs, &
            dplevs, nlev,ps(1,1,ntimelevel), numliqobs, status )
       if ( status .ne. nf90_noerr ) then
          have_numliq = .false.
@@ -593,12 +756,12 @@ integer, optional, intent(in) :: timelevel
    end if
 
    have_srf = .false.
-
+   srf=0._r8
    cldliqobs = 0._r8
    call cnst_get_ind('CLDLIQ', icldliq, abort=.false.)
    if ( icldliq > 0 ) then
       call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx, 'CLDLIQ', &
-           have_srf, srf(1), fill_ends, &
+           have_srf, srf(1), fill_ends, swaplevs, &
            dplevs, nlev,ps(1,1,ntimelevel), cldliqobs, status )
       if ( status .ne. nf90_noerr ) then
          have_cldliq = .false.
@@ -612,11 +775,13 @@ integer, optional, intent(in) :: timelevel
          have_cldliq = .false.
    endif
 
+   have_srf = .false.
+   srf=0._r8
    cldiceobs = 0._r8
    call cnst_get_ind('CLDICE', icldice, abort=.false.)
    if ( icldice > 0 ) then
       call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx, 'CLDICE', &
-           have_srf, srf(1), fill_ends, &
+           have_srf, srf(1), fill_ends, swaplevs, &
            dplevs, nlev,ps(1,1,ntimelevel), cldiceobs, status )
       if ( status .ne. nf90_noerr ) then
          have_cldice = .false.
@@ -630,12 +795,14 @@ integer, optional, intent(in) :: timelevel
       have_cldice = .false.
    endif
 
+   have_srf = .false.
+   srf=0._r8
    numiceobs = 0._r8
    call cnst_get_ind('NUMICE', inumice, abort=.false.)
    if ( inumice > 0 ) then
       have_srf = .false.
       call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx, 'NUMICE', &
-         have_srf, srf(1), fill_ends, &
+         have_srf, srf(1), fill_ends, swaplevs, &
          dplevs, nlev,ps(1,1,ntimelevel), numiceobs, status )
       if ( status .ne. nf90_noerr ) then
          have_numice = .false.
@@ -655,14 +822,17 @@ integer, optional, intent(in) :: timelevel
    status = nf90_inq_varid( ncid, 'divusrf', varid   )
    if ( status .ne. nf90_noerr ) then
       have_srf = .false.
+      srf=0._r8
    else
       status = nf90_get_var(ncid, varid, srf(1), strt4)
       have_srf = .true.
    endif
 
+   have_srf = .false.
+   srf=0._r8
    divu = 0._r8
    call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx, 'divu', &
-      have_srf, srf(1), fill_ends, &
+      have_srf, srf(1), fill_ends, swaplevs, &
       dplevs, nlev,ps(1,1,ntimelevel), divu, status )
    if ( status .ne. nf90_noerr ) then
       have_divu = .false.
@@ -682,7 +852,7 @@ integer, optional, intent(in) :: timelevel
 
    divv = 0._r8
    call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx, 'divv', &
-      have_srf, srf(1), fill_ends, &
+      have_srf, srf(1), fill_ends, swaplevs, &
       dplevs, nlev,ps(1,1,ntimelevel), divv, status )
    if ( status .ne. nf90_noerr ) then
       have_divv = .false.
@@ -701,14 +871,42 @@ integer, optional, intent(in) :: timelevel
    endif
 
    divt=0._r8
+   varname='divT'
+   status =  nf90_inq_varid( ncid, 'divT', varid   )
+   if ( status .eq. nf90_noerr ) varname='divT'
+   status =  nf90_inq_varid( ncid, 'T_adv_h', varid   )
+   if ( status .eq. nf90_noerr ) varname='T_adv_h'
 
    call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx, &
-      'divT', have_srf, srf(1), fill_ends, &
+      trim(varname), have_srf, srf(1), fill_ends, swaplevs, &
       dplevs, nlev,ps(1,1,ntimelevel), divt, status )
    if ( status .ne. nf90_noerr ) then
       have_divt = .false.
    else
       have_divt = .true.
+      status =  nf90_inq_varid( ncid, trim(varname), varid   )
+      call handle_ncerr(nf90_inquire_attribute(ncid, varid, 'units', len=u_attlen),&
+           'readiopdata.F90', __LINE__)
+      call handle_ncerr(nf90_get_att(ncid, varid, 'units', units),&
+           'readiopdata.F90', __LINE__)
+      units=trim(to_lower(units(1:u_attlen)))
+      select case (trim(units))
+      case ('k/s') ! this is what we want
+      case ('k/hr')
+         divt=divt/3600._r8
+      case ('k/hour')
+         divt=divt/3600._r8
+      case ('c/s') 
+         divt=divt+273.15_r8
+      case ('c/hr')
+         divt=divt+273.15_r8
+         divt=divt/3600._r8
+      case ('c/hour') 
+         divt=divt+273.15_r8
+         divt=divt/3600._r8
+      case default
+         call endrun(sub//':ERROR - no conversion for units of T horizontal advection term given:'//trim(units)//' need k/s')
+      end select
    endif
 
 !
@@ -723,14 +921,42 @@ integer, optional, intent(in) :: timelevel
    endif
    
    vertdivt=0._r8
+   varname='vertdivT'
+   status =  nf90_inq_varid( ncid, 'vertdivT', varid   )
+   if ( status .eq. nf90_noerr ) varname='vertdivT'
+   status =  nf90_inq_varid( ncid, 'T_adv_v', varid   )
+   if ( status .eq. nf90_noerr ) varname='T_adv_v'
 
-   call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx, 'vertdivT', &
-      have_srf, srf(1), fill_ends, &
+   call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx, trim(varname), &
+      have_srf, srf(1), fill_ends, swaplevs, &
       dplevs, nlev,ps(1,1,ntimelevel), vertdivt, status )
    if ( status .ne. nf90_noerr ) then
       have_vertdivt = .false.
    else
       have_vertdivt = .true.
+      status =  nf90_inq_varid( ncid, trim(varname), varid   )
+      call handle_ncerr(nf90_inquire_attribute(ncid, varid, 'units', len=u_attlen),&
+           'readiopdata.F90', __LINE__)
+      call handle_ncerr(nf90_get_att(ncid, varid, 'units', units),&
+           'readiopdata.F90', __LINE__)
+      units=trim(to_lower(units(1:u_attlen)))
+      select case (trim(units))
+      case ('k/s') ! this is what we want
+      case ('k/hr')
+         vertdivt=vertdivt/3600._r8
+      case ('k/hour')
+         vertdivt=vertdivt/3600._r8
+      case ('c/s') 
+         vertdivt=vertdivt+273.15_r8
+      case ('c/hr')
+         vertdivt=vertdivt+273.15_r8
+         vertdivt=vertdivt/3600._r8
+      case ('c/hour')
+         vertdivt=vertdivt+273.15_r8
+         vertdivt=vertdivt/3600._r8
+      case default
+         call endrun(sub//':ERROR - no conversion for units of T vertical advection term given:'//trim(units)//' need k/s')
+      end select
    endif
 !
 !	read divt3d (combined vertical/horizontal advection)
@@ -747,7 +973,7 @@ integer, optional, intent(in) :: timelevel
    divT3d = 0._r8
 
    call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx, 'divT3d', &
-      have_srf, srf(1), fill_ends, &
+      have_srf, srf(1), fill_ends, swaplevs, &
       dplevs, nlev,ps(1,1,ntimelevel), divt3d, status )
    if ( status .ne. nf90_noerr ) then
       have_divt3d = .false.
@@ -758,7 +984,7 @@ integer, optional, intent(in) :: timelevel
    divU3d = 0._r8
 
    call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx, 'divU3d', &
-      have_srf, srf(1), fill_ends, &
+      have_srf, srf(1), fill_ends, swaplevs, &
       dplevs, nlev,ps(1,1,ntimelevel), divu3d, status )
    if ( status .ne. nf90_noerr ) then
       have_divu3d = .false.
@@ -769,15 +995,16 @@ integer, optional, intent(in) :: timelevel
    divV3d = 0._r8
 
    call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx, 'divV3d', &
-      have_srf, srf(1), fill_ends, &
+      have_srf, srf(1), fill_ends, swaplevs, &
       dplevs, nlev,ps(1,1,ntimelevel), divv3d, status )
    if ( status .ne. nf90_noerr ) then
       have_divv3d = .false.
    else
       have_divv3d = .true.
    endif
-
+   
    status = nf90_inq_varid( ncid, 'Ptend', varid   )
+   if ( status .ne. nf90_noerr ) status = nf90_inq_varid( ncid, 'omega_srf', varid   )
    if ( status .ne. nf90_noerr ) then
       have_ptend = .false.
       if (masterproc) write(iulog,*) sub//':Could not find variable Ptend. Setting to zero'
@@ -786,12 +1013,37 @@ integer, optional, intent(in) :: timelevel
       status = nf90_get_var(ncid, varid, srf(1), strt4)
       have_ptend = .true.
       ptend= srf(1)
+      call handle_ncerr(nf90_inquire_attribute(ncid, varid, 'units', len=u_attlen),&
+           'readiopdata.F90', __LINE__)
+      call handle_ncerr(nf90_get_att(ncid, varid, 'units', units),&
+           'readiopdata.F90', __LINE__)
+      units=trim(to_lower(units(1:u_attlen)))
+      select case (trim(units))
+      case ('pa/s') ! this is what we want
+      case ('pascals/second') ! this is what we want
+      case ('pa/hr')
+         ptend=ptend/3600._r8
+      case ('pa/hour')
+         ptend=ptend/3600._r8
+      case ('mb/s')
+         ptend=ptend*100._r8
+      case ('millibars/second')
+         ptend=ptend*100._r8
+      case ('mb/hr')
+         ptend=ptend*100._r8/3600._r8
+      case ('mb/hour')
+         ptend=ptend*100._r8/3600._r8
+      case ('millibars/hour')
+         ptend=ptend*100._r8/3600._r8
+      case default
+         call endrun(sub//':ERROR - no conversion for units of pressure tendancy term given:'//trim(units)//' need pa/s')
+      end select
    endif
 
    wfld=0._r8
 
    call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx, &
-      'omega', .true., ptend, fill_ends, &
+      'omega', .true., ptend, fill_ends, swaplevs, &
       dplevs, nlev,ps(1,1,ntimelevel), wfld, status )
    if ( status .ne. nf90_noerr ) then
       have_omega = .false.
@@ -804,6 +1056,32 @@ integer, optional, intent(in) :: timelevel
       endif
    else
       have_omega = .true.
+      status =  nf90_inq_varid( ncid, 'omega', varid   )
+      call handle_ncerr(nf90_inquire_attribute(ncid, varid, 'units', len=u_attlen),&
+           'readiopdata.F90', __LINE__)
+      call handle_ncerr(nf90_get_att(ncid, varid, 'units', units),&
+           'readiopdata.F90', __LINE__)
+      units=trim(to_lower(units(1:u_attlen)))
+      select case (trim(units))
+      case ('pa/s') ! this is what we want
+      case ('pascals/second') ! this is what we want
+      case ('pa/hr')
+         wfld=wfld/3600._r8
+      case ('pa/hour')
+         wfld=wfld/3600._r8
+      case ('mb/s')
+         wfld=wfld*100._r8
+      case ('millibars/second')
+         wfld=wfld*100._r8
+      case ('mb/hr')
+         wfld=wfld*100._r8/3600._r8
+      case ('mb/hour')
+         wfld=wfld*100._r8/3600._r8
+      case ('millibars/hour')
+         wfld=wfld*100._r8/3600._r8
+      case default
+         call endrun(sub//':ERROR - no conversion for units of omega term given:'//trim(units)//' need pa/s')
+      end select
    endif
    call plevs0(1    ,plon   ,plev    ,ps(1,1,ntimelevel)   ,pint,pmid ,pdel)
    call shr_sys_flush( iulog )
@@ -819,17 +1097,19 @@ integer, optional, intent(in) :: timelevel
    end do
 
    status = nf90_inq_varid( ncid, 'usrf', varid   )
+   if ( status .ne. nf90_noerr ) status = nf90_inq_varid( ncid, 'u_srf', varid   )
    if ( status .ne. nf90_noerr ) then
-      have_srf = .false.
+      have_uref_clasp = .false.
+      uref_clasp(1)=0._r8
    else
-      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,srf)
-      have_srf = .true.
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,uref_clasp)
+      have_uref_clasp = .true.
    endif
 
    uobs=0._r8
 
    call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx, &
-      'u', have_srf, srf(1), fill_ends, &
+      'u', have_uref_clasp, uref_clasp(1), fill_ends, swaplevs, &
       dplevs, nlev,ps(1,1,ntimelevel), uobs, status )
    if ( status .ne. nf90_noerr ) then
       have_u = .false.
@@ -841,17 +1121,19 @@ integer, optional, intent(in) :: timelevel
    endif
 
    status = nf90_inq_varid( ncid, 'vsrf', varid   )
+   if ( status .ne. nf90_noerr ) status = nf90_inq_varid( ncid, 'v_srf', varid   )
    if ( status .ne. nf90_noerr ) then
-      have_srf = .false.
+      have_vref_clasp = .false.
+      vref_clasp = 0._r8
    else
-      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,srf)
-      have_srf = .true.
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,vref_clasp)
+      have_vref_clasp = .true.
    endif
 
    vobs=0._r8
 
    call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx, &
-      'v', have_srf, srf(1), fill_ends, &
+      'v', have_vref_clasp, vref_clasp(1), fill_ends, swaplevs, &
       dplevs, nlev,ps(1,1,ntimelevel), vobs, status )
    if ( status .ne. nf90_noerr ) then
       have_v = .false.
@@ -864,64 +1146,355 @@ integer, optional, intent(in) :: timelevel
    call shr_sys_flush( iulog )
 
    status = nf90_inq_varid( ncid, 'Prec', varid   )
+   if ( status .ne. nf90_noerr ) status = nf90_inq_varid( ncid, 'prec_srf', varid   )
    if ( status .ne. nf90_noerr ) then
       have_prec = .false.
+      precobs = 0._r8
    else
       call wrap_get_vara_realx (ncid,varid,strt4,cnt4,precobs)
       have_prec = .true.
+      call handle_ncerr(nf90_inquire_attribute(ncid, varid, 'units', len=u_attlen),&
+           'readiopdata.F90', __LINE__)
+      call handle_ncerr(nf90_get_att(ncid, varid, 'units', units),&
+           'readiopdata.F90', __LINE__)
+      units=trim(to_lower(units(1:u_attlen)))
+      select case (trim(units))
+      case ('m/s') ! this is what we want
+      case ('meters/second') ! this is what we want
+      case ('m/hr') 
+         precobs=precobs/3600._r8
+      case ('m/hour') 
+         precobs=precobs/3600._r8
+      case ('mm/s') 
+         precobs=precobs/1000._r8
+      case ('mm/hr') 
+         precobs=precobs/1000._r8/3600._r8
+      case ('mm/hour') 
+         precobs=precobs/1000._r8/3600._r8
+      case default
+         call endrun(sub//':ERROR - no conversion for units of precipitation given:'//trim(units)//' need m/s')
+      end select
    endif
 
    q1obs = 0._r8
+   varname='Q1'
+   status = nf90_inq_varid( ncid, 'Q1', varid   )
+   if ( status .eq. nf90_noerr ) varname='Q1'
+   status = nf90_inq_varid( ncid, 'q1', varid   )
+   if ( status .eq. nf90_noerr ) varname='q1'
 
-   call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx, 'Q1', &
-      .false., dummy, fill_ends, & ! datasets don't contain Q1 at surface
+   call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx, trim(varname), &
+      .false., dummy, fill_ends, swaplevs, & ! datasets don't contain Q1 at surface
       dplevs, nlev,ps(1,1,ntimelevel), q1obs, status )
    if ( status .ne. nf90_noerr ) then
       have_q1 = .false.
    else
       have_q1 = .true.
+      status = nf90_inq_varid( ncid, trim(varname), varid   )
+      call handle_ncerr(nf90_inquire_attribute(ncid, varid, 'units', len=u_attlen),&
+           'readiopdata.F90', __LINE__)
+      call handle_ncerr(nf90_get_att(ncid, varid, 'units', units),&
+           'readiopdata.F90', __LINE__)
+      units=trim(to_lower(units(1:u_attlen)))
+      select case (trim(units))
+      case ('k/s') ! this is what we want
+      case ('k/hr') 
+         q1obs=q1obs/3600._r8
+      case ('k/hour') 
+         q1obs=q1obs/3600._r8
+      case default
+         call endrun(sub//':ERROR - no conversion for units of Q1 given:'//trim(units)//' need k/s')
+      end select
    endif
 
-   q1obs = 0._r8
+   q2obs = 0._r8
 
-   call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx, 'Q2', &
-      .false., dummy, fill_ends, & ! datasets don't contain Q2 at surface
-      dplevs, nlev,ps(1,1,ntimelevel), q1obs, status )
+   varname='Q2'
+   status = nf90_inq_varid( ncid, 'Q2', varid   )
+   if ( status .eq. nf90_noerr ) varname='Q2'
+   status = nf90_inq_varid( ncid, 'q2', varid   )
+   if ( status .eq. nf90_noerr ) varname='q2'
+   call getinterpncdata( ncid, scmlat, scmlon, ioptimeidx, trim(varname), &
+      .false., dummy, fill_ends, swaplevs, & ! datasets don't contain Q2 at surface
+      dplevs, nlev,ps(1,1,ntimelevel), q2obs, status )
    if ( status .ne. nf90_noerr ) then
       have_q2 = .false.
    else
       have_q2 = .true.
+      status = nf90_inq_varid( ncid, trim(varname), varid   )
+      call handle_ncerr(nf90_inquire_attribute(ncid, varid, 'units', len=u_attlen),&
+           'readiopdata.F90', __LINE__)
+      call handle_ncerr(nf90_get_att(ncid, varid, 'units', units),&
+           'readiopdata.F90', __LINE__)
+      units=trim(to_lower(units(1:u_attlen)))
+      select case (trim(units))
+      case ('k/s') ! this is what we want
+      case ('k/hr') 
+         q2obs=q2obs/3600._r8
+      case ('k/hour') 
+         q2obs=q2obs/3600._r8
+      case default
+         call endrun(sub//':ERROR - no conversion for units of Q2 given:'//trim(units)//' need k/s')
+      end select
    endif
 
-!  Test for BOTH 'lhflx' and 'lh' without overwriting 'have_lhflx'.  
-!  Analagous changes made for the surface heat flux
-
    status = nf90_inq_varid( ncid, 'lhflx', varid   )
+   if ( status .ne. nf90_noerr ) status = nf90_inq_varid( ncid, 'lh', varid   )
+   if ( status .ne. nf90_noerr ) status = nf90_inq_varid( ncid, 'LH', varid   )
+   
    if ( status .ne. nf90_noerr ) then
-      status = nf90_inq_varid( ncid, 'lh', varid   )
-      if ( status .ne. nf90_noerr ) then
-        have_lhflx = .false.
-      else
-        call wrap_get_vara_realx (ncid,varid,strt4,cnt4,lhflxobs)
-        have_lhflx = .true.
-      endif
+      have_lhflx = .false.
    else
       call wrap_get_vara_realx (ncid,varid,strt4,cnt4,lhflxobs)
       have_lhflx = .true.
    endif
 
+
    status = nf90_inq_varid( ncid, 'shflx', varid   )
+   if ( status .ne. nf90_noerr ) status = nf90_inq_varid( ncid, 'sh', varid   )
+   if ( status .ne. nf90_noerr ) status = nf90_inq_varid( ncid, 'SH', varid   )
+   
    if ( status .ne. nf90_noerr ) then
-      status = nf90_inq_varid( ncid, 'sh', varid   )
-      if ( status .ne. nf90_noerr ) then
-        have_shflx = .false.
-      else
-        call wrap_get_vara_realx (ncid,varid,strt4,cnt4,shflxobs)
-        have_shflx = .true.
-      endif
+      have_shflx = .false.
    else
       call wrap_get_vara_realx (ncid,varid,strt4,cnt4,shflxobs)
       have_shflx = .true.
+   endif
+
+   ! Read in new land fluxes
+
+   ! read wpqtp_sfc (kg\\kg)m\\s)
+   status = nf90_inq_varid( ncid, 'wpqtp_sfc', varid   )
+   if ( status .ne. nf90_noerr ) then
+      have_wpqtpsfc_clasp = .false.
+   else
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,wpqtpsfc_clasp)
+      have_wpqtpsfc_clasp = .true.
+   endif
+
+   ! read wpthlp_sfc (mK\\s)
+   status = nf90_inq_varid( ncid, 'wpthlp_sfc', varid   )
+   if ( status .ne. nf90_noerr ) then
+      have_wpthlpsfc_clasp = .false.
+   else
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,wpthlpsfc_clasp)
+      have_wpthlpsfc_clasp = .true.
+   endif
+
+   ! read qp2 (kg2\\kg2)
+   status = nf90_inq_varid( ncid, 'qp2', varid   )
+   if ( status .ne. nf90_noerr ) then
+      have_qp2 = .false.
+   else
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,qp2obs)
+      have_qp2 = .true.
+      ! MDF: use CLASP variables as well 
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,rtp2_clasp)
+      have_rtp2_clasp = .true.
+   endif
+
+   ! read thlp2 (K2)
+   status = nf90_inq_varid( ncid, 'thlp2', varid   )
+   if ( status .ne. nf90_noerr ) then
+      have_thlp2_clasp = .false.
+   else
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,thlp2_clasp)
+      have_thlp2_clasp = .true.
+      ! MDF: Write statment to log file
+      write(iulog,*) 'Using CLASP thlp2 values.'
+      ! End MDF addition
+   endif
+
+   ! read thlpqp (Kkg\\kg)
+   status = nf90_inq_varid( ncid, 'thlpqp', varid   )
+   if ( status .ne. nf90_noerr ) then
+      have_rtpthlp_clasp = .false.
+   else
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,rtpthlp_clasp)
+      have_rtpthlp_clasp = .true.
+   endif
+
+   ! read wp2 (Kkg\\kg)
+   status = nf90_inq_varid( ncid, 'wp2', varid   )
+   if ( status .ne. nf90_noerr ) then
+      have_wp2_clasp = .false.
+   else
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,wp2_clasp)
+      have_wp2_clasp = .true.
+   endif
+
+   ! read wp4 (Kkg\\kg)
+   status = nf90_inq_varid( ncid, 'wp4', varid   )
+   if ( status .ne. nf90_noerr ) then
+      have_wp4_clasp = .false.
+   else
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,wp4_clasp)
+      have_wp4_clasp = .true.
+   endif
+
+   ! read wp2thetap (Km2\\s2)
+   status = nf90_inq_varid( ncid, 'wp2thetap', varid   )
+   if ( status .ne. nf90_noerr ) then
+      have_wp2thlp_clasp = .false.
+   else
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,wp2thlp_clasp)
+      have_wp2thlp_clasp = .true.
+      ! MDF: Write statment to log file
+      write(iulog,*) 'Using CLASP wp2thlp values.'
+      ! End MDF addition
+   endif
+
+   ! read wp2qp (kg\\kg)(m2\\s2)
+   status = nf90_inq_varid( ncid, 'wp2qp', varid   )
+   if ( status .ne. nf90_noerr ) then
+      have_wp2rtp_clasp = .false.
+   else
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,wp2rtp_clasp)
+      have_wp2rtp_clasp = .true.
+   endif
+
+   ! read wpqp2 (kg2\\kg2)(m\\s)
+   status = nf90_inq_varid( ncid, 'wpqp2', varid   )
+   if ( status .ne. nf90_noerr ) then
+      have_wprtp2_clasp = .false.
+   else
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,wprtp2_clasp)
+      have_wprtp2_clasp = .true.
+      ! MDF: Write statment to log file
+      write(iulog,*) 'Using CLASP wpqp2 values.'
+      ! End MDF addition
+   endif
+
+   ! read wpthetap2 (K2\\K2)(m\\s)
+   status = nf90_inq_varid( ncid, 'wpthetap2', varid   )
+   if ( status .ne. nf90_noerr ) then
+      have_wpthlp2_clasp = .false.
+   else
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,wpthlp2_clasp)
+      have_wpthlp2_clasp = .true.
+      ! MDF: Write statment to log file
+      write(iulog,*) 'Using CLASP wpthlp2 values.'
+      ! End MDF addition
+   endif
+
+   ! read wpthetapqp (Kmkg\\skg)
+   status = nf90_inq_varid( ncid, 'wpthetapqp', varid   )
+   if ( status .ne. nf90_noerr ) then
+      have_wprtpthlp_clasp = .false.
+   else
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,wprtpthlp_clasp)
+      have_wprtpthlp_clasp = .true.
+   endif
+
+   ! read wp3 (m3\\s3)
+   status = nf90_inq_varid( ncid, 'wp3', varid   )
+   if ( status .ne. nf90_noerr ) then
+      have_wp3_clasp = .false.
+   else
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,wp3_clasp)
+      have_wp3_clasp = .true.
+   endif
+
+   ! read upwp (m2\\s2)
+   status = nf90_inq_varid( ncid, 'upwp', varid   )
+   if ( status .ne. nf90_noerr ) then
+      have_upwp_clasp = .false.
+   else
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,upwp_clasp)
+      have_upwp_clasp = .true.
+   endif
+
+   ! read vpwp (m2\\s2)
+   status = nf90_inq_varid( ncid, 'vpwp', varid   )
+   if ( status .ne. nf90_noerr ) then
+      have_vpwp_clasp = .false.
+   else
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,vpwp_clasp)
+      have_vpwp_clasp = .true.
+   endif
+
+   
+   ! read T_soil
+   status = nf90_inq_varid( ncid, 'T_soil', varid   )
+   if ( status .ne. nf90_noerr ) then
+      have_tsoil = .false.
+   else
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,tsoilobs)
+      have_tsoil = .true.
+      if ( units=='c' .or. units=='celsius' ) then
+         !
+         !     convert celsius to kelvin
+         !
+         tsoilobs=tsoilobs+273.15_r8
+      endif
+   endif
+
+   ! read evap
+   status = nf90_inq_varid( ncid, 'evap_srf', varid   )
+   if ( status .ne. nf90_noerr ) then
+      have_evap = .false.
+   else
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,evapobs)
+      have_evap = .true.
+      status = nf90_inq_varid( ncid, 'evap_srf', varid   )
+      call handle_ncerr(nf90_inquire_attribute(ncid, varid, 'units', len=u_attlen),&
+           'readiopdata.F90', __LINE__)
+      call handle_ncerr(nf90_get_att(ncid, varid, 'units', units),&
+           'readiopdata.F90', __LINE__)
+      units=trim(to_lower(units(1:u_attlen)))
+      select case (trim(units))
+      case ('m/s') ! this is what we want
+      case ('meters/second') ! this is what we want
+      case ('m/hr') 
+         evapobs=evapobs/3600._r8
+      case ('m/hour') 
+         evapobs=evapobs/3600._r8
+      case ('mm/s') 
+         evapobs=evapobs/1000._r8
+      case ('mm/hr') 
+         evapobs=evapobs/1000._r8/3600._r8
+      case ('mm/hour') 
+         evapobs=evapobs/1000._r8/3600._r8
+      case default
+         call endrun(sub//':ERROR - no conversion for units of evaporation given:'//trim(units)//' need m/s')
+      end select
+
+   endif
+
+   ! read lw_up_srf
+   status = nf90_inq_varid( ncid, 'lw_up_srf', varid   )
+   if ( status .ne. nf90_noerr ) then
+      have_lwupsrf = .false.
+   else
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,lwupsrfobs)
+      have_lwupsrf = .true.
+   endif
+
+   ! read lw_dn_srf
+   status = nf90_inq_varid( ncid, 'lw_dn_srf', varid   )
+   if ( status .ne. nf90_noerr ) then
+      have_lwdnsrf = .false.
+   else
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,lwdnsrfobs)
+      have_lwdnsrf = .true.
+   endif
+
+   ! read sw_up_srf
+   status = nf90_inq_varid( ncid, 'sw_up_srf', varid   )
+   if ( status .ne. nf90_noerr ) then
+      have_swupsrf = .false.
+   else
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,swupsrfobs)
+      have_swupsrf = .true.
+   endif
+
+   ! read sw_dn_srf
+   status = nf90_inq_varid( ncid, 'sw_dn_srf', varid   )
+   if ( status .ne. nf90_noerr ) then
+      have_swdnsrf = .false.
+   else
+      call wrap_get_vara_realx (ncid,varid,strt4,cnt4,swdnsrfobs)
+      have_swdnsrf = .true.
    endif
 
    call shr_sys_flush( iulog )
@@ -1030,6 +1603,7 @@ subroutine setiopupdate
 !     Read time (tsec) variable 
 !     
       STATUS = NF90_INQ_VARID( NCID, 'tsec', tsec_varID )
+      if ( STATUS .NE. NF90_NOERR) STATUS = NF90_INQ_VARID( NCID, 'time_offset', tsec_varID )
       if ( STATUS .NE. NF90_NOERR .and. masterproc) write(iulog,*) &
          sub//':ERROR - setiopupdate.F:', &
          'Cant get variable ID for tsec'
