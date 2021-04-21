@@ -147,6 +147,8 @@ module clubb_intr
   logical  :: clubb_l_vert_avg_closure = .false.
   logical  :: clubb_l_diag_Lscale_from_tau = .false.
   logical  :: clubb_l_damp_wp2_using_em = .false.
+  ! CLASP: not sure if need to add this here, but probably:
+  logical  :: clubb_ctsm_moments = .false.
 
 !  Constant parameters
   logical, parameter, private :: &
@@ -531,7 +533,7 @@ end subroutine clubb_init_cnst
                                clubb_l_min_xp2_from_corr_wx, clubb_l_upwind_xpyp_ta, clubb_l_vert_avg_closure, &
                                clubb_l_trapezoidal_rule_zt, clubb_l_trapezoidal_rule_zm, &
                                clubb_l_call_pdf_closure_twice, clubb_l_use_cloud_cover, &
-                               clubb_l_diag_Lscale_from_tau, clubb_l_damp_wp2_using_em
+                               clubb_l_diag_Lscale_from_tau, clubb_l_damp_wp2_using_em, clubb_ctsm_moments
 
     !----- Begin Code -----
 
@@ -703,7 +705,10 @@ end subroutine clubb_init_cnst
     call mpi_bcast(clubb_l_diag_Lscale_from_tau,         1, mpi_logical, mstrid, mpicom, ierr)
     if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_l_diag_Lscale_from_tau")
     call mpi_bcast(clubb_l_damp_wp2_using_em,         1, mpi_logical, mstrid, mpicom, ierr)
-    if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_l_damp_wp2_using_em")
+    if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_l_damp_wp2_using_em") 
+    ! CLASP: adding here
+    call mpi_bcast(clubb_ctsm_moments,         1, mpi_logical, mstrid, mpicom, ierr)
+    if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_ctsm_moments")
 
     !  Overwrite defaults if they are true
     if (clubb_history) l_stats = .true.
@@ -1062,6 +1067,8 @@ end subroutine clubb_init_cnst
     clubb_config_flags%l_diag_Lscale_from_tau = clubb_l_diag_Lscale_from_tau
     clubb_config_flags%l_damp_wp2_using_em = clubb_l_damp_wp2_using_em
     clubb_config_flags%l_update_pressure = l_update_pressure
+    ! CLASP: Adding here
+    clubb_config_flags%ctsm_moments = clubb_ctsm_moments
 
    
     !  Set up CLUBB core.  Note that some of these inputs are overwritten
@@ -1709,7 +1716,10 @@ end subroutine clubb_init_cnst
 
    real(r8) :: rtm_integral_1, rtm_integral_update, rtm_integral_forcing, rtm_integral_vtend, rtm_integral_ltend
 
-   ! clasp 
+   ! clasp
+ 
+   ! logical  :: use_ctsm_moments = .true.
+   
    real(r8) :: wprtp2_output(pcols,pverp) 
    real(r8) :: wpthlp2_output(pcols,pverp) 
    real(r8) :: wp2rtp_output(pcols,pverp) 
@@ -2408,11 +2418,19 @@ end subroutine clubb_init_cnst
       wprtp_sfc  = cam_in%cflx(i,1)/rho_ds_zm(1)            ! Moisture flux  (check rho)
       upwp_sfc   = cam_in%wsx(i)/rho_ds_zm(1)               ! Surface meridional momentum flux
       vpwp_sfc   = cam_in%wsy(i)/rho_ds_zm(1)               ! Surface zonal momentum flux  
+      ! CLASP: use moments from CTSM 
+      if (clubb_ctsm_moments) then 
+          !write(iulog,*)'MDF:  clubb_ctsm_moments=.true. wpthlp should = ',cam_in%wpthlp_clubb_sfc(1) 
+          wpthlp_sfc = cam_in%wpthlp_clubb_sfc(1)   ! From CLM
+          wprtp_sfc  = cam_in%wprtp_clubb_sfc(1)    ! From CLM 
+          upwp_sfc   = cam_in%upwp_clubb_sfc(1)     ! From CLM
+          vpwp_sfc   = cam_in%vpwp_clubb_sfc(1)
+      endif
       ! clasp 
-      if (have_wprtp_clasp) wprtp_sfc = wprtp_clasp(1)
-      if (have_wpthlp_clasp) wpthlp_sfc = wpthlp_clasp(1)  
-      if (have_upwp_clasp) upwp_sfc = upwp_clasp(1)
-      if (have_vpwp_clasp) vpwp_sfc = vpwp_clasp(1) 
+      !if (have_wprtp_clasp) wprtp_sfc = wprtp_clasp(1)
+      !if (have_wpthlp_clasp) wpthlp_sfc = wpthlp_clasp(1)  
+      !if (have_upwp_clasp) upwp_sfc = upwp_clasp(1)
+      !if (have_vpwp_clasp) vpwp_sfc = vpwp_clasp(1) 
       
       !  Need to flip arrays around for CLUBB core
       do k=1,nlev+1
@@ -4605,7 +4623,8 @@ end function diag_ustar
                                       ! rtpthlp
       l_damp_wp3_Skw_squared,       & ! Set damping on wp3 to use Skw^2 rather than Skw^4
       l_prescribed_avg_deltaz,      & ! used in adj_low_res_nu. If .true., avg_deltaz = deltaz
-      l_update_pressure               ! Flag for having CLUBB update pressure and exner
+      l_update_pressure,            & ! Flag for having CLUBB update pressure and exner
+      ctsm_moments                    ! Flag for using surface moments computed by CTSM (CLASP)
 
     logical, save :: first_call = .true.
 
@@ -4649,7 +4668,8 @@ end function diag_ustar
                                                l_single_C2_Skw, & ! Out
                                                l_damp_wp3_Skw_squared, & ! Out
                                                l_prescribed_avg_deltaz, & ! Out
-                                               l_update_pressure ) ! Out
+                                               l_update_pressure, &
+                                               ctsm_moments ) ! Out
 
       call initialize_clubb_config_flags_type_api( l_use_precip_frac, & ! In
                                                    l_predict_upwp_vpwp, & ! In
@@ -4690,6 +4710,7 @@ end function diag_ustar
                                                    l_damp_wp3_Skw_squared, & ! In
                                                    l_prescribed_avg_deltaz, & ! In
                                                    l_update_pressure, & ! In
+                                                   ctsm_moments, &
                                                    clubb_config_flags_in ) ! Out
 
       first_call = .false.

@@ -62,6 +62,8 @@ module atm_import_export
   character(*),parameter :: u_FILE_u = &
        __FILE__
 
+  logical :: recv_from_lnd_clasp_fields = .true.
+
 !===============================================================================
 contains
 !===============================================================================
@@ -258,6 +260,15 @@ contains
     if (carma_fields /= ' ') then
        call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_soilw') ! optional for carma
        call set_active_Sl_soilw(.true.) ! check for carma
+    end if
+
+    if (recv_from_lnd_clasp_fields) then
+       call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_wp2_clubb'  )
+       ! call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_thlp2_clubb' )
+       call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_wpthlp_clubb'  )
+       call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_wprtp_clubb'  )
+       call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_upwp_clubb'  )
+       call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_vpwp_clubb'  )
     end if
 
     ! ------------------------------------------
@@ -754,6 +765,62 @@ contains
        end do
     end if
 
+    ! clubb moments from land
+    call state_getfldptr(importState, 'Sl_wp2_clubb', fldptr=fldptr1d, exists=exists, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    if (exists) then
+       g = 1
+       do c = begchunk,endchunk
+          do i = 1,get_ncols_p(c)
+             cam_in(c)%wp2_clubb_sfc(i) = fldptr1d(g)
+             g = g + 1
+          end do
+       end do
+    end if
+    call state_getfldptr(importState, 'Sl_wpthlp_clubb', fldptr=fldptr1d, exists=exists, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    if (exists) then
+       g = 1
+       do c = begchunk,endchunk
+          do i = 1,get_ncols_p(c)
+             cam_in(c)%wpthlp_clubb_sfc(i) = fldptr1d(g)
+             g = g + 1
+          end do
+       end do
+    end if
+    call state_getfldptr(importState, 'Sl_wprtp_clubb', fldptr=fldptr1d, exists=exists, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    if (exists) then
+       g = 1
+       do c = begchunk,endchunk
+          do i = 1,get_ncols_p(c)
+             cam_in(c)%wprtp_clubb_sfc(i) = fldptr1d(g)
+             g = g + 1
+          end do
+       end do
+    end if
+    call state_getfldptr(importState, 'Sl_upwp_clubb', fldptr=fldptr1d, exists=exists, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    if (exists) then
+       g = 1
+       do c = begchunk,endchunk
+          do i = 1,get_ncols_p(c)
+             cam_in(c)%upwp_clubb_sfc(i) = fldptr1d(g)
+             g = g + 1
+          end do
+       end do
+    end if
+    call state_getfldptr(importState, 'Sl_vpwp_clubb', fldptr=fldptr1d, exists=exists, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    if (exists) then
+       g = 1
+       do c = begchunk,endchunk
+          do i = 1,get_ncols_p(c)
+             cam_in(c)%vpwp_clubb_sfc(i) = fldptr1d(g)
+             g = g + 1
+          end do
+       end do
+    end if
     ! -----------------------------------
     ! Get total co2 flux from components,
     ! -----------------------------------

@@ -120,6 +120,11 @@ module camsrfexch
      real(r8), pointer, dimension(:,:) :: meganflx ! MEGAN fluxes
      real(r8), pointer, dimension(:,:) :: fireflx ! wild fire emissions
      real(r8), pointer, dimension(:)   :: fireztop ! wild fire emissions vert distribution top
+     real(r8), pointer, dimension(:)   :: wp2_clubb_sfc ! WP2_CLUBB computed at the surface by CTSM
+     real(r8), pointer, dimension(:)   :: wpthlp_clubb_sfc ! WPTHLP_CLUBB computed at the surface by CTSM
+     real(r8), pointer, dimension(:)   :: wprtp_clubb_sfc ! WPRTP_CLUBB computed at the surface by CTSM
+     real(r8), pointer, dimension(:)   :: upwp_clubb_sfc ! UPWP_CLUBB computed at the surface by CTSM
+     real(r8), pointer, dimension(:)   :: vpwp_clubb_sfc ! VPWP_CLUBB computed at the surface by CTSM
   end type cam_in_t    
 
 !===============================================================================
@@ -142,6 +147,9 @@ CONTAINS
     integer :: c        ! chunk index
     integer :: ierror   ! Error code
     character(len=*), parameter :: sub = 'hub2atm_alloc'
+
+    ! TODO MDF: need to make something more usable, but hacking in here to use CLASP fields
+    logical :: recv_from_lnd_clasp_fields = .true.
     !----------------------------------------------------------------------- 
 
     if ( .not. phys_grid_initialized() ) call endrun(sub//": phys_grid not called yet")
@@ -160,6 +168,11 @@ CONTAINS
        nullify(cam_in(c)%meganflx)
        nullify(cam_in(c)%fireflx)
        nullify(cam_in(c)%fireztop)
+       nullify(cam_in(c)%wp2_clubb_sfc)
+       nullify(cam_in(c)%wpthlp_clubb_sfc)
+       nullify(cam_in(c)%wprtp_clubb_sfc)
+       nullify(cam_in(c)%upwp_clubb_sfc)
+       nullify(cam_in(c)%vpwp_clubb_sfc)
     enddo  
     do c = begchunk,endchunk 
        if (active_Sl_ram1) then
@@ -183,6 +196,20 @@ CONTAINS
           allocate (cam_in(c)%meganflx(pcols,shr_megan_mechcomps_n), stat=ierror)
           if ( ierror /= 0 ) call endrun(sub//': allocation error meganflx')
        endif
+
+       ! MDF: Adding clasp variable 
+       if (recv_from_lnd_clasp_fields) then
+          allocate (cam_in(c)%wp2_clubb_sfc(pcols), stat=ierror)
+          if ( ierror /= 0 ) call endrun(sub//': allocation error wp2_clubb_sfc')
+          allocate (cam_in(c)%wpthlp_clubb_sfc(pcols), stat=ierror)
+          if ( ierror /= 0 ) call endrun(sub//': allocation error wpthlp_clubb_sfc')
+          allocate (cam_in(c)%wprtp_clubb_sfc(pcols), stat=ierror)
+          if ( ierror /= 0 ) call endrun(sub//': allocation error wprtp_clubb_sfc')
+          allocate (cam_in(c)%upwp_clubb_sfc(pcols), stat=ierror)
+          if ( ierror /= 0 ) call endrun(sub//': allocation error upwp_clubb_sfc')
+          allocate (cam_in(c)%vpwp_clubb_sfc(pcols), stat=ierror)
+          if ( ierror /= 0 ) call endrun(sub//': allocation error vpwp_clubb_sfc')
+       endif
     end do
 
     if (lnd_drydep .and. n_drydep>0) then
@@ -200,6 +227,7 @@ CONTAINS
           if ( ierror /= 0 ) call endrun(sub//': allocation error fireztop')
        enddo
     endif
+
 
     do c = begchunk,endchunk
        cam_in(c)%lchnk = c
@@ -237,6 +265,14 @@ CONTAINS
             cam_in(c)%dstflx(:,:) = 0.0_r8
        if (associated(cam_in(c)%meganflx)) &
             cam_in(c)%meganflx(:,:) = 0.0_r8
+
+       if (recv_from_lnd_clasp_fields) then 
+          cam_in(c)%wp2_clubb_sfc (:)  = 0.0_r8
+          cam_in(c)%wpthlp_clubb_sfc (:) = 0.0_r8
+          cam_in(c)%wprtp_clubb_sfc (:) = 0.0_r8
+          cam_in(c)%upwp_clubb_sfc (:) = 0.0_r8
+          cam_in(c)%vpwp_clubb_sfc (:) = 0.0_r8
+       endif
 
        cam_in(c)%cflx   (:,:) = 0._r8
        cam_in(c)%ustar    (:) = 0._r8
@@ -382,7 +418,28 @@ CONTAINS
              deallocate(cam_in(c)%depvel)
              nullify(cam_in(c)%depvel)
           end if
-          
+        
+          ! CLASP variables 
+          if(associated(cam_in(c)%wp2_clubb_sfc)) then
+             deallocate(cam_in(c)%wp2_clubb_sfc)
+             nullify(cam_in(c)%wp2_clubb_sfc)
+          end if 
+          if(associated(cam_in(c)%wpthlp_clubb_sfc)) then
+             deallocate(cam_in(c)%wpthlp_clubb_sfc)
+             nullify(cam_in(c)%wpthlp_clubb_sfc)
+          end if
+          if(associated(cam_in(c)%wprtp_clubb_sfc)) then
+             deallocate(cam_in(c)%wprtp_clubb_sfc)
+             nullify(cam_in(c)%wprtp_clubb_sfc)
+          end if
+          if(associated(cam_in(c)%upwp_clubb_sfc)) then
+             deallocate(cam_in(c)%upwp_clubb_sfc)
+             nullify(cam_in(c)%upwp_clubb_sfc)
+          end if
+          if(associated(cam_in(c)%vpwp_clubb_sfc)) then
+             deallocate(cam_in(c)%vpwp_clubb_sfc)
+             nullify(cam_in(c)%vpwp_clubb_sfc)
+          end if
        enddo
 
        deallocate(cam_in)

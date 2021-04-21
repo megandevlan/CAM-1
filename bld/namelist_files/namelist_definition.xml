@@ -3691,6 +3691,14 @@ energy.
 Default: true
 </entry>
 
+<entry id="clubb_ctsm_moments" type="logical"  category="pblrad"
+       group="clubb_params_nl" valid_values="" >
+Use surface moments passed through the coupler from CTSM. 
+Default: false
+</entry>
+
+
+
 <!-- for CLUBB+MF -->
 <entry id="do_clubb_mf" type="logical" category="conv"
        group="clubb_mf_nl" valid_values="" >
