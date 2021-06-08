@@ -125,6 +125,18 @@ module camsrfexch
      real(r8), pointer, dimension(:)   :: wprtp_clubb_sfc ! WPRTP_CLUBB computed at the surface by CTSM
      real(r8), pointer, dimension(:)   :: upwp_clubb_sfc ! UPWP_CLUBB computed at the surface by CTSM
      real(r8), pointer, dimension(:)   :: vpwp_clubb_sfc ! VPWP_CLUBB computed at the surface by CTSM
+     real(r8), pointer, dimension(:)   :: rtp2_clubb_sfc ! RTP2_CLUBB computed at the surface by CTSM
+     real(r8), pointer, dimension(:)   :: thlp2_clubb_sfc ! THLP2_CLUBB computed at the surface by CTSM
+     real(r8), pointer, dimension(:)   :: thlprtp_clubb_sfc ! THLPRTP_CLUBB computed at the surface by CTSM
+     real(r8), pointer, dimension(:)   :: wp3_clubb_sfc ! WP3_CLUBB computed at the surface by CTSM
+     real(r8), pointer, dimension(:)   :: wp4_clubb_sfc ! WP4_CLUBB computed at the surface by CTSM
+     real(r8), pointer, dimension(:)   :: up2_clubb_sfc ! UP2_CLUBB computed at the surface by CTSM
+     real(r8), pointer, dimension(:)   :: vp2_clubb_sfc ! VP2_CLUBB computed at the surface by CTSM
+     real(r8), pointer, dimension(:)   :: wp2thlp_clubb_sfc ! WP2THLP_CLUBB computed at the surface by CTSM 
+     real(r8), pointer, dimension(:)   :: wp2rtp_clubb_sfc ! WP2RTP_CLUBB computed at the surface by CTSM
+     real(r8), pointer, dimension(:)   :: wprtp2_clubb_sfc ! WPRTP2_CLUBB computed at the surface by CTSM
+     real(r8), pointer, dimension(:)   :: wpthlp2_clubb_sfc ! WPTHLP2_CLUBB computed at the surface by CTSM
+     real(r8), pointer, dimension(:)   :: wpthlprtp_clubb_sfc ! WPTHLPRTP_CLUBB computed at the surface by CTSM
   end type cam_in_t    
 
 !===============================================================================
@@ -173,6 +185,18 @@ CONTAINS
        nullify(cam_in(c)%wprtp_clubb_sfc)
        nullify(cam_in(c)%upwp_clubb_sfc)
        nullify(cam_in(c)%vpwp_clubb_sfc)
+       nullify(cam_in(c)%rtp2_clubb_sfc)
+       nullify(cam_in(c)%thlp2_clubb_sfc)
+       nullify(cam_in(c)%thlprtp_clubb_sfc)
+       nullify(cam_in(c)%wp3_clubb_sfc)
+       nullify(cam_in(c)%wp4_clubb_sfc)
+       nullify(cam_in(c)%up2_clubb_sfc)
+       nullify(cam_in(c)%vp2_clubb_sfc)
+       nullify(cam_in(c)%wp2thlp_clubb_sfc)
+       nullify(cam_in(c)%wp2rtp_clubb_sfc)
+       nullify(cam_in(c)%wprtp2_clubb_sfc)
+       nullify(cam_in(c)%wpthlp2_clubb_sfc)
+       nullify(cam_in(c)%wpthlprtp_clubb_sfc)
     enddo  
     do c = begchunk,endchunk 
        if (active_Sl_ram1) then
@@ -209,6 +233,30 @@ CONTAINS
           if ( ierror /= 0 ) call endrun(sub//': allocation error upwp_clubb_sfc')
           allocate (cam_in(c)%vpwp_clubb_sfc(pcols), stat=ierror)
           if ( ierror /= 0 ) call endrun(sub//': allocation error vpwp_clubb_sfc')
+          allocate (cam_in(c)%rtp2_clubb_sfc(pcols), stat=ierror)
+          if ( ierror /= 0 ) call endrun(sub//': allocation error rtp2_clubb_sfc')
+          allocate (cam_in(c)%thlp2_clubb_sfc(pcols), stat=ierror)
+          if ( ierror /= 0 ) call endrun(sub//': allocation error thlp2_clubb_sfc')
+          allocate (cam_in(c)%thlprtp_clubb_sfc(pcols), stat=ierror)
+          if ( ierror /= 0 ) call endrun(sub//': allocation error thlprtp_clubb_sfc')
+          allocate (cam_in(c)%wp3_clubb_sfc(pcols), stat=ierror)
+          if ( ierror /= 0 ) call endrun(sub//': allocation error wp3_clubb_sfc')
+          allocate (cam_in(c)%wp4_clubb_sfc(pcols), stat=ierror)
+          if ( ierror /= 0 ) call endrun(sub//': allocation error wp4_clubb_sfc')
+          allocate (cam_in(c)%up2_clubb_sfc(pcols), stat=ierror)
+          if ( ierror /= 0 ) call endrun(sub//': allocation error up2_clubb_sfc')
+          allocate (cam_in(c)%vp2_clubb_sfc(pcols), stat=ierror)
+          if ( ierror /= 0 ) call endrun(sub//': allocation error vp2_clubb_sfc')
+          allocate (cam_in(c)%wp2thlp_clubb_sfc(pcols), stat=ierror)
+          if ( ierror /= 0 ) call endrun(sub//': allocation error wp2thlp_clubb_sfc')
+          allocate (cam_in(c)%wp2rtp_clubb_sfc(pcols), stat=ierror)
+          if ( ierror /= 0 ) call endrun(sub//': allocation error wp2rtp_clubb_sfc')
+          allocate (cam_in(c)%wprtp2_clubb_sfc(pcols), stat=ierror)
+          if ( ierror /= 0 ) call endrun(sub//': allocation error wprtp2_clubb_sfc')
+          allocate (cam_in(c)%wpthlp2_clubb_sfc(pcols), stat=ierror)
+          if ( ierror /= 0 ) call endrun(sub//': allocation error wpthlp2_clubb_sfc')
+          allocate (cam_in(c)%wpthlprtp_clubb_sfc(pcols), stat=ierror)
+          if ( ierror /= 0 ) call endrun(sub//': allocation error wpthlprtp_clubb_sfc')
        endif
     end do
 
@@ -272,6 +320,18 @@ CONTAINS
           cam_in(c)%wprtp_clubb_sfc (:) = 0.0_r8
           cam_in(c)%upwp_clubb_sfc (:) = 0.0_r8
           cam_in(c)%vpwp_clubb_sfc (:) = 0.0_r8
+          cam_in(c)%rtp2_clubb_sfc (:) = 0.0_r8
+          cam_in(c)%thlp2_clubb_sfc (:) = 0.0_r8
+          cam_in(c)%thlprtp_clubb_sfc (:) = 0.0_r8
+          cam_in(c)%wp3_clubb_sfc (:) = 0.0_r8
+          cam_in(c)%wp4_clubb_sfc (:) = 0.0_r8
+          cam_in(c)%up2_clubb_sfc (:) = 0.0_r8
+          cam_in(c)%vp2_clubb_sfc (:) = 0.0_r8
+          cam_in(c)%wp2thlp_clubb_sfc (:) = 0.0_r8
+          cam_in(c)%wp2rtp_clubb_sfc (:) = 0.0_r8
+          cam_in(c)%wprtp2_clubb_sfc (:) = 0.0_r8
+          cam_in(c)%wpthlp2_clubb_sfc (:) = 0.0_r8
+          cam_in(c)%wpthlprtp_clubb_sfc (:) = 0.0_r8
        endif
 
        cam_in(c)%cflx   (:,:) = 0._r8
@@ -439,6 +499,54 @@ CONTAINS
           if(associated(cam_in(c)%vpwp_clubb_sfc)) then
              deallocate(cam_in(c)%vpwp_clubb_sfc)
              nullify(cam_in(c)%vpwp_clubb_sfc)
+          end if
+          if(associated(cam_in(c)%rtp2_clubb_sfc)) then
+             deallocate(cam_in(c)%rtp2_clubb_sfc)
+             nullify(cam_in(c)%rtp2_clubb_sfc)
+          end if
+          if(associated(cam_in(c)%thlp2_clubb_sfc)) then
+             deallocate(cam_in(c)%thlp2_clubb_sfc)
+             nullify(cam_in(c)%thlp2_clubb_sfc)
+          end if
+          if(associated(cam_in(c)%thlprtp_clubb_sfc)) then
+             deallocate(cam_in(c)%thlprtp_clubb_sfc)
+             nullify(cam_in(c)%thlprtp_clubb_sfc)
+          end if
+          if(associated(cam_in(c)%wp3_clubb_sfc)) then
+             deallocate(cam_in(c)%wp3_clubb_sfc)
+             nullify(cam_in(c)%wp3_clubb_sfc)
+          end if
+          if(associated(cam_in(c)%wp4_clubb_sfc)) then
+             deallocate(cam_in(c)%wp4_clubb_sfc)
+             nullify(cam_in(c)%wp4_clubb_sfc)
+          end if
+          if(associated(cam_in(c)%up2_clubb_sfc)) then
+             deallocate(cam_in(c)%up2_clubb_sfc)
+             nullify(cam_in(c)%up2_clubb_sfc)
+          end if
+          if(associated(cam_in(c)%vp2_clubb_sfc)) then
+             deallocate(cam_in(c)%vp2_clubb_sfc)
+             nullify(cam_in(c)%vp2_clubb_sfc)
+          end if
+          if(associated(cam_in(c)%wp2thlp_clubb_sfc)) then
+             deallocate(cam_in(c)%wp2thlp_clubb_sfc)
+             nullify(cam_in(c)%wp2thlp_clubb_sfc)
+          end if
+          if(associated(cam_in(c)%wp2rtp_clubb_sfc)) then
+             deallocate(cam_in(c)%wp2rtp_clubb_sfc)
+             nullify(cam_in(c)%wp2rtp_clubb_sfc)
+          end if
+          if(associated(cam_in(c)%wprtp2_clubb_sfc)) then
+             deallocate(cam_in(c)%wprtp2_clubb_sfc)
+             nullify(cam_in(c)%wprtp2_clubb_sfc)
+          end if
+          if(associated(cam_in(c)%wpthlp2_clubb_sfc)) then
+             deallocate(cam_in(c)%wpthlp2_clubb_sfc)
+             nullify(cam_in(c)%wpthlp2_clubb_sfc)
+          end if
+          if(associated(cam_in(c)%wpthlprtp_clubb_sfc)) then
+             deallocate(cam_in(c)%wpthlprtp_clubb_sfc)
+             nullify(cam_in(c)%wpthlprtp_clubb_sfc)
           end if
        enddo
 

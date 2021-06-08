@@ -1627,7 +1627,21 @@ end subroutine clubb_init_cnst
    real(r8) :: wpthlp_sfc                       ! w' theta_l' at surface                        [(m K)/s]
    real(r8) :: wprtp_sfc                        ! w' r_t' at surface                            [(kg m)/( kg s)]
    real(r8) :: upwp_sfc                         ! u'w' at surface                               [m^2/s^2]
-   real(r8) :: vpwp_sfc                         ! v'w' at surface                               [m^2/s^2]   
+   real(r8) :: vpwp_sfc                         ! v'w' at surface                               [m^2/s^2]
+!+++ MDF
+   real(r8) :: wp2_sfc                         ! w'w' at surface                               [m^2/s^2]
+   real(r8) :: thlp2_sfc                       ! theta_l'theta_l' at surface                   [K^2]
+   real(r8) :: rtp2_sfc                        ! r_t'r_t' at surface                           [kg/kg]
+   real(r8) :: rtpthlp_sfc                     ! r_t'theta_l' at surface                       [K kg/kg]
+   real(r8) :: wp4_sfc                         ! w'w'w'w' at surface                           [m^4/s^4]
+   real(r8) :: wp3_sfc                         ! w'w'w' at surface                             [m^3/s^3]
+   real(r8) :: wp2thlp_sfc                     ! w'w'theta_l' at surface                       [K m^2/s^2] 
+   real(r8) :: wp2rtp_sfc                      ! w'w'r_t' at surface                           [m^2 kg/s^2 kg] 
+   real(r8) :: wpthlp2_sfc                     ! w'theta_l'theta_l' at surface                 [K^2 m/s]
+   real(r8) :: wprtp2_sfc                      ! w'r_t'r_t' at surface                         [m kg^2/s kg^2] 
+   real(r8) :: wprtpthlp_sfc                   ! w'theta_l'r_t' at surface                     [K m kg/s kg]
+   real(r8) :: up2_sfc                         ! u'u' at surface                               [m^2/s^2] 
+!--- MDF
    real(r8) :: sclrm_forcing(pverp+1-top_lev,sclr_dim)    ! Passive scalar forcing                        [{units vary}/s]
    real(r8) :: wpsclrp_sfc(sclr_dim)            ! Scalar flux at surface                        [{units vary} m/s]
    real(r8) :: edsclrm_forcing(pverp+1-top_lev,edsclr_dim)! Eddy passive scalar forcing                   [{units vary}/s]
@@ -2418,14 +2432,40 @@ end subroutine clubb_init_cnst
       wprtp_sfc  = cam_in%cflx(i,1)/rho_ds_zm(1)            ! Moisture flux  (check rho)
       upwp_sfc   = cam_in%wsx(i)/rho_ds_zm(1)               ! Surface meridional momentum flux
       vpwp_sfc   = cam_in%wsy(i)/rho_ds_zm(1)               ! Surface zonal momentum flux  
+! +++ MDF
+      wp2_sfc       = -9999.0_r8
+      thlp2_sfc     = -9999.0_r8
+      rtp2_sfc      = -9999.0_r8
+      rtpthlp_sfc   = -9999.0_r8
+      wp4_sfc       = -9999.0_r8
+      wp3_sfc       = -9999.0_r8
+      wp2thlp_sfc   = -9999.0_r8
+      wp2rtp_sfc    = -9999.0_r8
+      wpthlp2_sfc   = -9999.0_r8
+      wprtp2_sfc    = -9999.0_r8
+      wprtpthlp_sfc = -9999.0_r8
+      up2_sfc       = -9999.0_r8
       ! CLASP: use moments from CTSM 
-      if (clubb_ctsm_moments) then 
+      if (clubb_ctsm_moments .and. cam_in%landfrac(i)>0.1_r8) then 
           !write(iulog,*)'MDF:  clubb_ctsm_moments=.true. wpthlp should = ',cam_in%wpthlp_clubb_sfc(1) 
-          wpthlp_sfc = cam_in%wpthlp_clubb_sfc(1)   ! From CLM
-          wprtp_sfc  = cam_in%wprtp_clubb_sfc(1)    ! From CLM 
-          upwp_sfc   = cam_in%upwp_clubb_sfc(1)     ! From CLM
-          vpwp_sfc   = cam_in%vpwp_clubb_sfc(1)
+          !wpthlp_sfc    = cam_in%wpthlp_clubb_sfc(i)   ! From CLM
+          !wprtp_sfc     = cam_in%wprtp_clubb_sfc(i)    ! From CLM 
+          !upwp_sfc      = cam_in%upwp_clubb_sfc(i)     ! From CLM
+          !vpwp_sfc      = cam_in%vpwp_clubb_sfc(i)
+          wp2_sfc       = cam_in%wp2_clubb_sfc(i) 
+          thlp2_sfc     = cam_in%thlp2_clubb_sfc(i)
+          rtp2_sfc      = cam_in%rtp2_clubb_sfc(i)
+          rtpthlp_sfc   = cam_in%thlprtp_clubb_sfc(i)
+          wp4_sfc       = cam_in%wp4_clubb_sfc(i)
+          wp3_sfc       = cam_in%wp3_clubb_sfc(i)
+          wp2thlp_sfc   = cam_in%wp2thlp_clubb_sfc(i)
+          wp2rtp_sfc    = cam_in%wp2rtp_clubb_sfc(i)
+          wpthlp2_sfc   = cam_in%wpthlp2_clubb_sfc(i)
+          wprtp2_sfc    = cam_in%wprtp2_clubb_sfc(i)
+          wprtpthlp_sfc = cam_in%wpthlprtp_clubb_sfc(i)
+          up2_sfc       = cam_in%up2_clubb_sfc(i)
       endif
+! --- MDF
       ! clasp 
       !if (have_wprtp_clasp) wprtp_sfc = wprtp_clasp(1)
       !if (have_wpthlp_clasp) wpthlp_sfc = wpthlp_clasp(1)  
@@ -2615,6 +2655,11 @@ end subroutine clubb_init_cnst
             wpthlp_forcing, rtp2_forcing, thlp2_forcing, &
             rtpthlp_forcing, wm_zm, wm_zt, &
             wpthlp_sfc, wprtp_sfc, upwp_sfc, vpwp_sfc, &
+! +++ MDF
+            wp2_sfc, thlp2_sfc, rtp2_sfc, rtpthlp_sfc, &
+            wp4_sfc, wp3_sfc, wp2thlp_sfc, wp2rtp_sfc, &
+            wpthlp2_sfc, wprtp2_sfc, wprtpthlp_sfc, up2_sfc, &
+! --- MDF
             wpsclrp_sfc, wpedsclrp_sfc, &
             p_in_Pa, rho_zm, rho_in, exner, &
             rho_ds_zm, rho_ds_zt, invrs_rho_ds_zm, &

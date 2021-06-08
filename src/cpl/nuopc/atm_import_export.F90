@@ -264,11 +264,22 @@ contains
 
     if (recv_from_lnd_clasp_fields) then
        call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_wp2_clubb'  )
-       ! call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_thlp2_clubb' )
+       call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_thlp2_clubb' )
        call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_wpthlp_clubb'  )
        call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_wprtp_clubb'  )
        call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_upwp_clubb'  )
        call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_vpwp_clubb'  )
+       call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_rtp2_clubb' ) 
+       call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_thlprtp_clubb' )
+       call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_wp3_clubb' )
+       call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_wp4_clubb' )
+       call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_up2_clubb' )
+       call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_vp2_clubb' )
+       call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_wp2thlp_clubb' )
+       call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_wp2rtp_clubb' )
+       call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_wprtp2_clubb' )
+       call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_wpthlp2_clubb' )
+       call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_wpthlprtp_clubb' )
     end if
 
     ! ------------------------------------------
@@ -821,6 +832,139 @@ contains
           end do
        end do
     end if
+    call state_getfldptr(importState, 'Sl_rtp2_clubb', fldptr=fldptr1d, exists=exists, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    if (exists) then
+       g = 1
+       do c = begchunk,endchunk
+          do i = 1,get_ncols_p(c)
+             cam_in(c)%rtp2_clubb_sfc(i) = fldptr1d(g)
+             g = g + 1
+          end do
+       end do
+    end if
+    call state_getfldptr(importState, 'Sl_thlp2_clubb', fldptr=fldptr1d, exists=exists, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    if (exists) then
+       g = 1
+       do c = begchunk,endchunk
+          do i = 1,get_ncols_p(c)
+             cam_in(c)%thlp2_clubb_sfc(i) = fldptr1d(g)
+             g = g + 1
+          end do
+       end do
+    end if
+    call state_getfldptr(importState, 'Sl_thlprtp_clubb', fldptr=fldptr1d, exists=exists, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    if (exists) then
+       g = 1
+       do c = begchunk,endchunk
+          do i = 1,get_ncols_p(c)
+             cam_in(c)%thlprtp_clubb_sfc(i) = fldptr1d(g)
+             g = g + 1
+          end do
+       end do
+    end if
+    call state_getfldptr(importState, 'Sl_wp3_clubb', fldptr=fldptr1d, exists=exists, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    if (exists) then
+       g = 1
+       do c = begchunk,endchunk
+          do i = 1,get_ncols_p(c)
+             cam_in(c)%wp3_clubb_sfc(i) = fldptr1d(g)
+             g = g + 1
+          end do
+       end do
+    end if
+    call state_getfldptr(importState, 'Sl_wp4_clubb', fldptr=fldptr1d, exists=exists, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    if (exists) then
+       g = 1
+       do c = begchunk,endchunk
+          do i = 1,get_ncols_p(c)
+             cam_in(c)%wp4_clubb_sfc(i) = fldptr1d(g)
+             g = g + 1
+          end do
+       end do
+    end if
+    call state_getfldptr(importState, 'Sl_up2_clubb', fldptr=fldptr1d, exists=exists, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    if (exists) then
+       g = 1
+       do c = begchunk,endchunk
+          do i = 1,get_ncols_p(c)
+             cam_in(c)%up2_clubb_sfc(i) = fldptr1d(g)
+             g = g + 1
+          end do
+       end do
+    end if
+    call state_getfldptr(importState, 'Sl_vp2_clubb', fldptr=fldptr1d, exists=exists, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    if (exists) then
+       g = 1
+       do c = begchunk,endchunk
+          do i = 1,get_ncols_p(c)
+             cam_in(c)%vp2_clubb_sfc(i) = fldptr1d(g)
+             g = g + 1
+          end do
+       end do
+    end if
+    call state_getfldptr(importState, 'Sl_wp2thlp_clubb', fldptr=fldptr1d, exists=exists, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    if (exists) then
+       g = 1
+       do c = begchunk,endchunk
+          do i = 1,get_ncols_p(c)
+             cam_in(c)%wp2thlp_clubb_sfc(i) = fldptr1d(g)
+             g = g + 1
+          end do
+       end do
+    end if
+    call state_getfldptr(importState, 'Sl_wp2rtp_clubb', fldptr=fldptr1d, exists=exists, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    if (exists) then
+       g = 1
+       do c = begchunk,endchunk
+          do i = 1,get_ncols_p(c)
+             cam_in(c)%wp2rtp_clubb_sfc(i) = fldptr1d(g)
+             g = g + 1
+          end do
+       end do
+    end if
+    call state_getfldptr(importState, 'Sl_wprtp2_clubb', fldptr=fldptr1d, exists=exists, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    if (exists) then
+       g = 1
+       do c = begchunk,endchunk
+          do i = 1,get_ncols_p(c)
+             cam_in(c)%wprtp2_clubb_sfc(i) = fldptr1d(g)
+             g = g + 1
+          end do
+       end do
+    end if
+    call state_getfldptr(importState, 'Sl_wpthlp2_clubb', fldptr=fldptr1d, exists=exists, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    if (exists) then
+       g = 1
+       do c = begchunk,endchunk
+          do i = 1,get_ncols_p(c)
+             cam_in(c)%wpthlp2_clubb_sfc(i) = fldptr1d(g)
+             g = g + 1
+          end do
+       end do
+    end if
+    call state_getfldptr(importState, 'Sl_wpthlprtp_clubb', fldptr=fldptr1d, exists=exists, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    if (exists) then
+       g = 1
+       do c = begchunk,endchunk
+          do i = 1,get_ncols_p(c)
+             cam_in(c)%wpthlprtp_clubb_sfc(i) = fldptr1d(g)
+             g = g + 1
+          end do
+       end do
+    end if
+
     ! -----------------------------------
     ! Get total co2 flux from components,
     ! -----------------------------------
