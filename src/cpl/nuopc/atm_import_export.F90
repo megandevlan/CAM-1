@@ -1422,10 +1422,26 @@ contains
     if (present(exists)) then
        call ESMF_StateGet(state, trim(fldname), itemFlag, rc=rc)
        if (ChkErr(rc,__LINE__,u_FILE_u)) return
-       if (itemflag == ESMF_STATEITEM_NOTFOUND) then
-          call ESMF_FieldGet(lfield, farrayPtr=fldptr2d, rc=rc)
-          if (ChkErr(rc,__LINE__,u_FILE_u)) return
-       end if
+       !if (itemflag == ESMF_STATEITEM_NOTFOUND) then
+       !   call ESMF_FieldGet(lfield, farrayPtr=fldptr2d, rc=rc)
+       !   if (ChkErr(rc,__LINE__,u_FILE_u)) return
+       !end if
+        if (itemflag == ESMF_STATEITEM_NOTFOUND) then
+           lexists = .false.
+        end if
+        exists = lexists
+     end if
+
+     if (lexists) then
+        call ESMF_StateGet(State, itemName=trim(fldname), field=lfield, rc=rc)
+        if (ChkErr(rc,__LINE__,u_FILE_u)) return
+        if (present(fldptr)) then
+           call ESMF_FieldGet(lfield, farrayPtr=fldptr, rc=rc)
+           if (ChkErr(rc,__LINE__,u_FILE_u)) return
+        else if (present(fldptr2d)) then
+           call ESMF_FieldGet(lfield, farrayPtr=fldptr2d, rc=rc)
+           if (ChkErr(rc,__LINE__,u_FILE_u)) return
+        end if
     end if
 
   end subroutine state_getfldptr
