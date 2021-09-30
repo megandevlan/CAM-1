@@ -1221,6 +1221,8 @@ end subroutine clubb_init_cnst
     call addfld('WP2THLP_CLUBB', (/ 'ilev' /), 'A',  '-', 'wp2thlp_clubb')
     call addfld('WPRTPTHLP_CLUBB', (/ 'ilev' /), 'A',  '-', 'wprtpthlp_clubb')
     call addfld('WP4_CLUBB', (/ 'ilev' /), 'A',  '-', 'wp4_clubb')
+    ! MDF
+    call addfld('RTPTHVP_CLUBB', (/ 'ilev' /), 'A',  'kg/kg K', 'rtpthvp_clubb')
 
     call addfld('WPRTP2_ZM_CLUBB', (/ 'ilev' /), 'A',  '-', 'wprtp2_zm_clubb')
     call addfld('WPTHLP2_ZM_CLUBB', (/ 'ilev' /), 'A', '-', 'wpthlp2_zm_clubb')
@@ -1641,6 +1643,7 @@ end subroutine clubb_init_cnst
    real(r8) :: wprtp2_sfc                      ! w'r_t'r_t' at surface                         [m kg^2/s kg^2] 
    real(r8) :: wprtpthlp_sfc                   ! w'theta_l'r_t' at surface                     [K m kg/s kg]
    real(r8) :: up2_sfc                         ! u'u' at surface                               [m^2/s^2] 
+   real(r8) :: vp2_sfc                         ! v'v' at surface                               [m^2/s^2] 
 !--- MDF
    real(r8) :: sclrm_forcing(pverp+1-top_lev,sclr_dim)    ! Passive scalar forcing                        [{units vary}/s]
    real(r8) :: wpsclrp_sfc(sclr_dim)            ! Scalar flux at surface                        [{units vary} m/s]
@@ -1740,6 +1743,8 @@ end subroutine clubb_init_cnst
    real(r8) :: wp2thlp_output(pcols,pverp) 
    real(r8) :: wprtpthlp_output(pcols,pverp) 
    real(r8) :: wp4_output(pcols,pverp) 
+   ! MDF 
+   ! real(r8) :: rtpthvp_output(pcols,pverp)
 
    real(r8) :: wprtp2(pverp) 
    real(r8) :: wpthlp2(pverp) 
@@ -2445,8 +2450,9 @@ end subroutine clubb_init_cnst
       wprtp2_sfc    = -9999.0_r8
       wprtpthlp_sfc = -9999.0_r8
       up2_sfc       = -9999.0_r8
+      vp2_sfc       = -9999.0_r8
       ! CLASP: use moments from CTSM 
-      if (clubb_ctsm_moments .and. cam_in%landfrac(i)>0.1_r8) then 
+      if (clubb_ctsm_moments .and. cam_in%landfrac(i)>0.75_r8) then 
           !write(iulog,*)'MDF:  clubb_ctsm_moments=.true. wpthlp should = ',cam_in%wpthlp_clubb_sfc(1) 
           !wpthlp_sfc    = cam_in%wpthlp_clubb_sfc(i)   ! From CLM
           !wprtp_sfc     = cam_in%wprtp_clubb_sfc(i)    ! From CLM 
@@ -2464,6 +2470,7 @@ end subroutine clubb_init_cnst
           wprtp2_sfc    = cam_in%wprtp2_clubb_sfc(i)
           wprtpthlp_sfc = cam_in%wpthlprtp_clubb_sfc(i)
           up2_sfc       = cam_in%up2_clubb_sfc(i)
+          vp2_sfc       = cam_in%vp2_clubb_sfc(i)
       endif
 ! --- MDF
       ! clasp 
@@ -2658,7 +2665,7 @@ end subroutine clubb_init_cnst
 ! +++ MDF
             wp2_sfc, thlp2_sfc, rtp2_sfc, rtpthlp_sfc, &
             wp4_sfc, wp3_sfc, wp2thlp_sfc, wp2rtp_sfc, &
-            wpthlp2_sfc, wprtp2_sfc, wprtpthlp_sfc, up2_sfc, &
+            wpthlp2_sfc, wprtp2_sfc, wprtpthlp_sfc, up2_sfc, vp2_sfc, &
 ! --- MDF
             wpsclrp_sfc, wpedsclrp_sfc, &
             p_in_Pa, rho_zm, rho_in, exner, &
@@ -2767,6 +2774,8 @@ end subroutine clubb_init_cnst
          wp2thlp_output(i,k)   = wp2thlp(pverp-k+1)
          wprtpthlp_output(i,k) = wprtpthlp(pverp-k+1)
          wp4_output(i,k)      = wp4(pverp-k+1)
+         ! MDF 
+         ! rtpthvp_output(i,k)  = rtpthvp(pverp-k+1)
 
          wprtp2_zm_output(i,k)    = wprtp2_zm(pverp-k+1)
          wpthlp2_zm_output(i,k)   = wpthlp2_zm(pverp-k+1)
@@ -3610,6 +3619,8 @@ end subroutine clubb_init_cnst
    call outfld('WP2THLP_CLUBB', wp2thlp_output, pcols, lchnk)
    call outfld('WPRTPTHLP_CLUBB', wprtpthlp_output, pcols, lchnk)
    call outfld('WP4_CLUBB', wp4_output, pcols, lchnk)
+   ! MDF 
+   call outfld('RTPTHVP_CLUBB', rtpthvp, pcols, lchnk)
 
    call outfld('WPRTP2_ZM_CLUBB', wprtp2_zm_output, pcols, lchnk)
    call outfld('WPTHLP2_ZM_CLUBB', wpthlp2_zm_output, pcols, lchnk)
