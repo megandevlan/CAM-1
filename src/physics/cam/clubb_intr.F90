@@ -2452,7 +2452,7 @@ end subroutine clubb_init_cnst
       up2_sfc       = -9999.0_r8
       vp2_sfc       = -9999.0_r8
       ! CLASP: use moments from CTSM 
-      if (clubb_ctsm_moments .and. cam_in%landfrac(i)>0.75_r8) then 
+      if (clubb_ctsm_moments .and. cam_in%landfrac(i)==1.0_r8 .and. (.not. is_first_step())) then 
           !write(iulog,*)'MDF:  clubb_ctsm_moments=.true. wpthlp should = ',cam_in%wpthlp_clubb_sfc(1) 
           !wpthlp_sfc    = cam_in%wpthlp_clubb_sfc(i)   ! From CLM
           !wprtp_sfc     = cam_in%wprtp_clubb_sfc(i)    ! From CLM 
