@@ -24,10 +24,7 @@ module clubb_mf
             do_clubb_mf_diag, &
             clubb_mf_nup, &
             do_clubb_mf_rad, &
-            clubb_mf_Lopt, &
-            clubb_mf_ddalph, &
-            clubb_mf_up_ndt, &
-            clubb_mf_cp_ndt
+            clubb_mf_Lopt
 
   !
   ! Lopt 0 = fixed L0
@@ -47,15 +44,10 @@ module clubb_mf
   real(r8) :: clubb_mf_alphturb= 0._r8
   real(r8) :: clubb_mf_max_L0  = 0._r8
   real(r8) :: clubb_mf_fdd     = 0._r8
-  real(r8) :: clubb_mf_ddalph  = 0._r8  
-  real(r8) :: clubb_mf_ddbeta  = 0._r8
-  integer  :: clubb_mf_up_ndt  = 1
-  integer  :: clubb_mf_cp_ndt  = 1
   integer, protected :: clubb_mf_nup     = 0
   logical, protected :: do_clubb_mf = .false.
   logical, protected :: do_clubb_mf_diag = .false.
   logical, protected :: do_clubb_mf_rad = .false.
-  logical, protected :: do_clubb_mf_coldpool = .false.
   logical :: do_clubb_mf_precip = .false.
   logical :: tht_tweaks = .true.
   integer :: mf_num_cin = 5
@@ -80,7 +72,7 @@ module clubb_mf
 
     namelist /clubb_mf_nl/ clubb_mf_Lopt, clubb_mf_a0, clubb_mf_b0, clubb_mf_L0, clubb_mf_ent0, clubb_mf_alphturb, &
                            clubb_mf_nup, clubb_mf_max_L0, do_clubb_mf, do_clubb_mf_diag, do_clubb_mf_precip, do_clubb_mf_rad, &
-                           clubb_mf_fdd, do_clubb_mf_coldpool, clubb_mf_ddalph, clubb_mf_ddbeta, clubb_mf_up_ndt, clubb_mf_cp_ndt
+                           clubb_mf_fdd
 
     if (masterproc) then
       open( newunit=iunit, file=trim(nlfile), status='old' )
@@ -120,16 +112,6 @@ module clubb_mf
     if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: do_clubb_mf_rad")
     call mpi_bcast(clubb_mf_fdd,  1, mpi_real8,   mstrid, mpicom, ierr)
     if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_mf_fdd")
-    call mpi_bcast(do_clubb_mf_coldpool, 1, mpi_logical, mstrid, mpicom, ierr)
-    if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: do_clubb_mf_coldpool")
-    call mpi_bcast(clubb_mf_ddalph,  1, mpi_real8,   mstrid, mpicom, ierr)
-    if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_mf_ddalph")
-    call mpi_bcast(clubb_mf_ddbeta,  1, mpi_real8,   mstrid, mpicom, ierr)
-    if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_mf_ddbeta")
-    call mpi_bcast(clubb_mf_up_ndt, 1, mpi_integer, mstrid, mpicom, ierr)
-    if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_mf_up_ndt")
-    call mpi_bcast(clubb_mf_cp_ndt, 1, mpi_integer, mstrid, mpicom, ierr)
-    if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_mf_cp_ndt")
 
     if ((.not. do_clubb_mf) .and. do_clubb_mf_diag ) then
        call endrun('clubb_mf_readnl: Error - cannot turn on do_clubb_mf_diag without also turning on do_clubb_mf')
@@ -426,8 +408,8 @@ module clubb_mf
      ! minimum downdraft speed
      real(r8),parameter                   :: mindnw = 1.E-2_r8
      !
-     ! limiter on cold pool effects
-     real(r8),parameter                   :: max_cpfac = 5._r8
+     ! turn on cold-pool feedbacks
+     logical                              :: coldpool = .false.
 
      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
      !!!!!!!!!!!!!!!!!!!!!! BEGIN CODE !!!!!!!!!!!!!!!!!!!!!!!
@@ -654,7 +636,7 @@ module clubb_mf
        ! --------------------------------------------------------- !
 
        cpfac = 1._r8
-       if (do_clubb_mf_coldpool) cpfac = ( min(max(ddcp/wstar,1._r8),max_cpfac) )**clubb_mf_ddbeta 
+       if (coldpool) cpfac = max(ddcp/wstar,1._r8)  
  
        ! affect the entrainmnet length scale
        dynamic_L0 = dynamic_L0 * cpfac

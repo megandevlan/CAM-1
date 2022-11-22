@@ -34,8 +34,7 @@ module clubb_intr
   use clubb_api_module, only: pdf_parameter, implicit_coefs_terms
   use clubb_api_module, only: clubb_config_flags_type
   use cloud_fraction,   only: dp1, dp2
-  use clubb_mf,         only: do_clubb_mf, do_clubb_mf_diag, clubb_mf_nup, do_clubb_mf_rad, clubb_mf_Lopt, &
-                              clubb_mf_ddalph, clubb_mf_up_ndt, clubb_mf_cp_ndt
+  use clubb_mf,         only: do_clubb_mf, do_clubb_mf_diag, clubb_mf_nup, do_clubb_mf_rad, clubb_mf_Lopt
   use cam_history_support, only: add_hist_coord
 #endif
 
@@ -297,6 +296,11 @@ module clubb_intr
   integer :: ddcp_macmic_idx
   integer :: ddcpmn_idx
 
+!+++ARH
+  integer, parameter :: ndd=8
+  integer, parameter :: nud=8
+!---ARH
+
   !  Output arrays for CLUBB statistics    
   real(r8), allocatable, dimension(:,:,:) :: out_zt, out_zm, out_radzt, out_radzm, out_sfc
 
@@ -440,12 +444,12 @@ module clubb_intr
       call pbuf_add_field('edmf_thlflx_macmic' ,'physpkg',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps/), mf_wpthlp_macmic_idx)
       call pbuf_add_field('edmf_qtflx_macmic'  ,'physpkg',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps/), mf_wprtp_macmic_idx)
       call pbuf_add_field('edmf_thvflx_macmic' ,'physpkg',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps/), mf_wpthvp_macmic_idx)
-      call pbuf_add_field('ZTOPMN'             ,'global' ,  dtype_r8, (/clubb_mf_up_ndt,pcols/), ztopmn_idx)
+      call pbuf_add_field('ZTOPMN'             ,'global' ,  dtype_r8, (/nud,pcols/), ztopmn_idx)
       call pbuf_add_field('ZTOPMA'             ,'global' ,  dtype_r8, (/pcols/), ztopma_idx)
       call pbuf_add_field('ZTOP_MACMIC'        ,'physpkg',  dtype_r8, (/pcols/), ztopm1_macmic_idx)
       call pbuf_add_field('DDCP'               ,'global' ,  dtype_r8, (/pcols/), ddcp_idx)
       call pbuf_add_field('DDCP_MACMIC'        ,'physpkg',  dtype_r8, (/pcols/), ddcp_macmic_idx)
-      call pbuf_add_field('DDCPMN'             ,'global' ,  dtype_r8, (/clubb_mf_cp_ndt,pcols/), ddcpmn_idx)
+      call pbuf_add_field('DDCPMN'             ,'global' ,  dtype_r8, (/ndd,pcols/), ddcpmn_idx)
     end if
 
 #endif 
@@ -2142,6 +2146,8 @@ end subroutine clubb_init_cnst
                                            mf_precc_nadv, mf_snow_nadv,&
                                            mf_L0,      mf_L0_nadv,     &
                                            mf_ddcp,    mf_ddcp_nadv
+   real(r8), parameter                  :: ddalph = 1.4E3_r8
+   real(r8), parameter                  :: ddtau  = 14400._r8
 
    real(r8), dimension(pcols,pver)      :: esat,      rh
    real(r8), dimension(pcols,pver)      :: mq,        mqsat
@@ -3245,30 +3251,30 @@ end subroutine clubb_init_cnst
 
         if (macmic_it == cld_macmic_num_steps) then
 
-          if (clubb_mf_up_ndt == 1) then
+          if (nud == 1) then
             ztopma(i) = ztopm1_macmic(i)/REAL(cld_macmic_num_steps)
           else
-            ztopmn(2:clubb_mf_up_ndt,i) = ztopmn(1:clubb_mf_up_ndt-1,i)
+            ztopmn(2:nud,i) = ztopmn(1:nud-1,i)
             ztopmn(1,i) = ztopm1_macmic(i)/REAL(cld_macmic_num_steps)
             ztopma(i) = 0._r8
-            do t=1,clubb_mf_up_ndt
+            do t=1,nud
               ztopma(i) = ztopma(i) + ztopmn(t,i)
             end do
-            ztopma(i) = ztopma(i)/REAL(clubb_mf_up_ndt)
+            ztopma(i) = ztopma(i)/REAL(nud)
           end if
 
-          if (clubb_mf_cp_ndt == 1) then
+          if (ndd == 1) then
             ddcp(i) = ddcp_macmic(i)/REAL(cld_macmic_num_steps)
           else
-            ddcpmn(2:clubb_mf_cp_ndt,i) = ddcpmn(1:clubb_mf_cp_ndt-1,i)
+            ddcpmn(2:ndd,i) = ddcpmn(1:ndd-1,i)
             ddcpmn(1,i) = ddcp_macmic(i)/REAL(cld_macmic_num_steps) 
             ddcp(i) = 0._r8
-            do t=1,clubb_mf_cp_ndt
+            do t=1,ndd
               ddcp(i) = ddcp(i) + ddcpmn(t,i)
             end do
-            ddcp(i) = ddcp(i)/REAL(clubb_mf_cp_ndt)
+            ddcp(i) = ddcp(i)/REAL(ndd)
           end if
-          ddcp(i) = clubb_mf_ddalph*ddcp(i)
+          ddcp(i) = ddalph*ddcp(i)
 
         end if
  
@@ -3457,7 +3463,7 @@ end subroutine clubb_init_cnst
         mf_ztop_output(i) = mf_ztop_nadv
         mf_L0_output(i)   = mf_L0_nadv
         mf_cfl_output(i)  = max_cfl_nadv
-        mf_ddcp_output(i) = ddcp(i) !mf_ddcp_nadv !ddcp(i)
+        mf_ddcp_output(i) = ddcp(i)
         do k=1,clubb_mf_nup
           mf_upa_output(i,pverp*(k-1)+1:pverp*k)   = mf_upa_flip(i,:pverp,k)
           mf_upw_output(i,pverp*(k-1)+1:pverp*k)   = mf_upw_flip(i,:pverp,k)
