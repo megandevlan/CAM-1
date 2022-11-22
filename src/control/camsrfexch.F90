@@ -120,6 +120,12 @@ module camsrfexch
      real(r8), pointer, dimension(:,:) :: meganflx ! MEGAN fluxes
      real(r8), pointer, dimension(:,:) :: fireflx ! wild fire emissions
      real(r8), pointer, dimension(:)   :: fireztop ! wild fire emissions vert distribution top
+!+++ MDF
+     real(r8), pointer, dimension(:,:) :: lndFlx_shflxPatch ! patch fluxes
+     real(r8), pointer, dimension(:,:) :: lndFlx_lhflxPatch ! patch fluxes
+     real(r8), pointer, dimension(:,:) :: lnd_fvPatch       ! patch states 
+     real(r8), pointer, dimension(:,:) :: lnd_areaPatch     ! patch states 
+!--- MDF
   end type cam_in_t    
 
 !===============================================================================
@@ -141,8 +147,15 @@ CONTAINS
     ! LOCAL VARIABLES:
     integer :: c        ! chunk index
     integer :: ierror   ! Error code
+    !+++ MDF 
+    integer, parameter :: maxPatch = 78 ! Max number of surface tiles to fill 
+    !--- MDF
     character(len=*), parameter :: sub = 'hub2atm_alloc'
     !----------------------------------------------------------------------- 
+
+!+++ MDF
+     write(iulog,*)'MDF:  in srfxch, value of maxPatch is: ',maxPatch
+!--- MDF
 
     if ( .not. phys_grid_initialized() ) call endrun(sub//": phys_grid not called yet")
     allocate (cam_in(begchunk:endchunk), stat=ierror)
@@ -160,6 +173,12 @@ CONTAINS
        nullify(cam_in(c)%meganflx)
        nullify(cam_in(c)%fireflx)
        nullify(cam_in(c)%fireztop)
+       !+++ MDF
+       nullify(cam_in(c)%lndFlx_shflxPatch)
+       nullify(cam_in(c)%lndFlx_lhflxPatch)
+       nullify(cam_in(c)%lnd_fvPatch)
+       nullify(cam_in(c)%lnd_areaPatch)
+       !--- MDF
     enddo  
     do c = begchunk,endchunk 
        if (active_Sl_ram1) then
@@ -200,6 +219,27 @@ CONTAINS
           if ( ierror /= 0 ) call endrun(sub//': allocation error fireztop')
        enddo
     endif
+
+    !+++ MDF
+    ! TODO: Add switch
+    do c = begchunk,endchunk
+       allocate(cam_in(c)%lndFlx_shflxPatch(pcols,maxPatch), stat=ierror)
+       if ( ierror /= 0 ) call endrun(sub//': allocation error patch data')
+       write(iulog,*)'MDF: This is the value of cam_in%lndFlx_shflxPatch:',cam_in(c)%lndFlx_shflxPatch(pcols,maxPatch)
+
+       allocate(cam_in(c)%lndFlx_lhflxPatch(pcols,maxPatch), stat=ierror)
+       if ( ierror /= 0 ) call endrun(sub//': allocation error patch data')
+       write(iulog,*)'MDF: This is the value of cam_in%lndFlx_lhflxPatch:',cam_in(c)%lndFlx_lhflxPatch(pcols,maxPatch)
+
+       allocate(cam_in(c)%lnd_fvPatch(pcols,maxPatch), stat=ierror)
+       if ( ierror /= 0 ) call endrun(sub//': allocation error patch data')
+       write(iulog,*)'MDF: This is the value of cam_in%lnd_fvPatch:',cam_in(c)%lnd_fvPatch(pcols,maxPatch)
+
+       allocate(cam_in(c)%lnd_areaPatch(pcols,maxPatch), stat=ierror)
+       if ( ierror /= 0 ) call endrun(sub//': allocation error patch data')
+       write(iulog,*)'MDF: This is the value of cam_in%lnd_areaPatch:',cam_in(c)%lnd_areaPatch(pcols,maxPatch)
+    end do
+    !--- MDF
 
     do c = begchunk,endchunk
        cam_in(c)%lchnk = c
@@ -249,6 +289,13 @@ CONTAINS
           cam_in(c)%fireflx(:,:) = 0._r8
           cam_in(c)%fireztop(:) = 0._r8
        endif
+       !+++ MDF 
+       ! TODO: Add switch
+       cam_in(c)%lndFlx_shflxPatch(:,:) = 9999._r8
+       cam_in(c)%lndFlx_lhflxPatch(:,:) = 9999._r8
+       cam_in(c)%lnd_fvPatch(:,:)       = 9999._r8
+       cam_in(c)%lnd_areaPatch(:,:)     = 9999._r8
+       !--- MDF
     end do
 
   end subroutine hub2atm_alloc
@@ -382,7 +429,29 @@ CONTAINS
              deallocate(cam_in(c)%depvel)
              nullify(cam_in(c)%depvel)
           end if
-          
+          !+++ MDF 
+          if(associated(cam_in(c)%lndFlx_shflxPatch)) then
+             deallocate(cam_in(c)%lndFlx_shflxPatch)
+             nullify(cam_in(c)%lndFlx_shflxPatch)
+          end if
+
+          if(associated(cam_in(c)%lndFlx_lhflxPatch)) then
+             deallocate(cam_in(c)%lndFlx_lhflxPatch)
+             nullify(cam_in(c)%lndFlx_lhflxPatch)
+          end if
+
+          if(associated(cam_in(c)%lnd_fvPatch)) then
+             deallocate(cam_in(c)%lnd_fvPatch)
+             nullify(cam_in(c)%lnd_fvPatch)
+          end if
+
+          if(associated(cam_in(c)%lnd_areaPatch)) then
+             deallocate(cam_in(c)%lnd_areaPatch)
+             nullify(cam_in(c)%lnd_areaPatch)
+          end if
+
+          write(iulog,*)'MDF: deallocate section okay'
+          !--- MDF           
        enddo
 
        deallocate(cam_in)
