@@ -90,9 +90,6 @@ contains
     logical                :: flds_co2b      ! use case
     logical                :: flds_co2c      ! use case
     integer                :: ndep_nflds, megan_nflds, emis_nflds
-    !+++ MDF
-    integer, parameter :: maxPatch = 78 ! Max number of surface tiles to fill 
-    !--- MDF
     character(len=128)     :: fldname
     character(len=*), parameter :: subname='(atm_import_export:advertise_fields)'
     !-------------------------------------------------------------------------------
@@ -262,16 +259,6 @@ contains
        call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_soilw') ! optional for carma
        call set_active_Sl_soilw(.true.) ! check for carma
     end if
-
-    !+++ MDF
-    ! TODO: Add switch here 
-    call fldlist_add(fldsToAtm_num, fldsToAtm, 'Fl_shflxPatch', ungridded_lbound=1,ungridded_ubound=maxPatch)
-    call fldlist_add(fldsToAtm_num, fldsToAtm, 'Fl_lhflxPatch', ungridded_lbound=1,ungridded_ubound=maxPatch)
-    call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_fvPatch',    ungridded_lbound=1,ungridded_ubound=maxPatch)
-    call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_areaPatch',  ungridded_lbound=1,ungridded_ubound=maxPatch)
-
-    !--- MDF 
-
 
     ! ------------------------------------------
     ! Now advertise above import fields
@@ -616,78 +603,6 @@ contains
           end if
        end do
     end if
-
-    !+++ MDF 
-    call state_getfldptr(importState, 'Fl_shflxPatch', fldptr2d=fldptr2d, exists=exists, rc=rc)
-    if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    write(iulog,*)'MDF: The value of exists (Fl_shflxPatch) is: ',exists
-    if (exists) then
-       g = 1
-       do c = begchunk,endchunk
-          if ( associated(cam_in(c)%lndFlx_shflxPatch) ) then
-             do i = 1,get_ncols_p(c)
-                do n = 1, size(fldptr2d, dim=1)
-                   !cam_in(c)%eflx_sh_tot_patch(i,n) = fldptr2d(n,g) * med2mod_areacor(g)
-                   cam_in(c)%lndFlx_shflxPatch(i,n) = fldptr2d(n,g)
-                end do
-                g = g + 1
-             end do
-          end if
-       end do
-    end if
-
-    call state_getfldptr(importState, 'Fl_lhflxPatch', fldptr2d=fldptr2d, exists=exists, rc=rc)
-    if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    write(iulog,*)'MDF: The value of exists (Fl_lhflxPatch) is: ',exists
-    if (exists) then
-       g = 1
-       do c = begchunk,endchunk
-          if ( associated(cam_in(c)%lndFlx_lhflxPatch) ) then
-             do i = 1,get_ncols_p(c)
-                do n = 1, size(fldptr2d, dim=1)
-                   cam_in(c)%lndFlx_lhflxPatch(i,n) = fldptr2d(n,g)
-                end do
-                g = g + 1
-             end do
-          end if
-       end do
-    end if
-
-    call state_getfldptr(importState, 'Sl_fvPatch', fldptr2d=fldptr2d, exists=exists, rc=rc)
-    if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    write(iulog,*)'MDF: The value of exists (Sl_fvPatch) is: ',exists
-    if (exists) then
-       g = 1
-       do c = begchunk,endchunk
-          if ( associated(cam_in(c)%lnd_fvPatch) ) then
-             do i = 1,get_ncols_p(c)
-                do n = 1, size(fldptr2d, dim=1)
-                   cam_in(c)%lnd_fvPatch(i,n) = fldptr2d(n,g)
-                end do
-                g = g + 1
-             end do
-          end if
-       end do
-    end if
-
-    call state_getfldptr(importState, 'Sl_areaPatch', fldptr2d=fldptr2d, exists=exists, rc=rc)
-    if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    write(iulog,*)'MDF: The value of exists (Sl_areaPatch) is: ',exists
-    if (exists) then
-       g = 1
-       do c = begchunk,endchunk
-          if ( associated(cam_in(c)%lnd_areaPatch) ) then
-             do i = 1,get_ncols_p(c)
-                do n = 1, size(fldptr2d, dim=1)
-                   cam_in(c)%lnd_areaPatch(i,n) = fldptr2d(n,g)
-                end do
-                g = g + 1
-             end do
-          end if
-       end do
-    end if
-
-    ! --- MDF 
 
     ! dry deposition fluxes from land
     call state_getfldptr(importState, 'Fall_flxdst', fldptr2d=fldptr2d, exists=exists, rc=rc)
