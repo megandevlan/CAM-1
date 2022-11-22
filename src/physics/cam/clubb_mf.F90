@@ -645,6 +645,7 @@ module clubb_mf
        ! --------------------------------------------------------- !
        ! Initialize using Deardorff convective velocity scale      ! 
        ! --------------------------------------------------------- !
+
        convh = max(pblh,pblhmin)
        wstar = max( wstarmin, (gravit/thv(1)*wthv*convh)**(1._r8/3._r8) )
 
@@ -791,11 +792,6 @@ module clubb_mf
                  wn = 0.5_r8*(wn + wn0)
                end if
 
-               ! save this iteration
-               qtn0  = qtn
-               thln0 = thln
-               wn0 = wn
-
                ! --------------------------------------------------------- !
                ! Compute excess water to derive neutral mixing fraction    ! 
                ! after Bretherton et al 2014                               !
@@ -895,6 +891,11 @@ module clubb_mf
                eturb = (1._r8 + clubb_mf_alphturb*sqrt(tke(k))/upw(k,i))
              end if
              entn = entn * eturb
+
+             ! save this iteration
+             qtn0  = qtn
+             thln0 = thln
+             wn0 = wn
 
              ! integrate updraft
              entexp  = exp(-entn*eturb*dzt(k+1))

@@ -1332,8 +1332,8 @@ end subroutine clubb_init_cnst
       call addfld ( 'edmf_thlflx'   , (/ 'ilev' /), 'A', 'K m/s'    , 'thl flux (EDMF)' )
       call addfld ( 'edmf_qtflx'    , (/ 'ilev' /), 'A', 'kg/kg m/s', 'qt flux (EDMF)' )
       call addfld ( 'edmf_thvflx'   , (/ 'ilev' /), 'A', 'K m/s'    , 'thv flux (EDMF)' )
-      call addfld ( 'edmf_sqtup'    , (/ 'lev' /), 'A', 'kg/kg/s' , 'Plume updraft microphysics tendency (EDMF)' )
-      call addfld ( 'edmf_sqtdn'    , (/ 'lev' /), 'A', 'kg/kg/s' , 'Plume downdraft microphysics tendency (EDMF)' )
+      call addfld ( 'edmf_sqtup'    , (/ 'ilev' /), 'A', 'kg/kg/s' , 'Plume updraft microphysics tendency (EDMF)' )
+      call addfld ( 'edmf_sqtdn'    , (/ 'ilev' /), 'A', 'kg/kg/s' , 'Plume downdraft microphysics tendency (EDMF)' )
       call addfld ( 'edmf_rcm'      , (/ 'ilev' /), 'A', 'kg/kg'   , 'grid mean cloud (EDMF)' )
       call addfld ( 'edmf_cloudfrac', (/ 'lev' /),  'A', 'fraction', 'grid mean cloud fraction (EDMF)' )
       call addfld ( 'edmf_ent'      , (/ 'lev' /),  'A', '1/m'     , 'ensemble mean entrainment (EDMF)' )
@@ -3407,6 +3407,8 @@ end subroutine clubb_init_cnst
            s_awu_output(i,pverp-k+1)        = s_awu(k)
            s_awv_output(i,pverp-k+1)        = s_awv(k)
 
+           mf_sqtup_output(i,pverp-k+1)     = mf_sqtup(k)
+           mf_sqtdn_output(i,pverp-k+1)     = mf_sqtdn(k)
            mf_thlflxup_output(i,pverp-k+1)  = mf_thlflxup(k)
            mf_qtflxup_output(i,pverp-k+1)   = mf_qtflxup(k)
            mf_thlflxdn_output(i,pverp-k+1)  = mf_thlflxdn(k)
@@ -3425,8 +3427,6 @@ end subroutine clubb_init_cnst
              mf_qtforcdn_output(i,pverp-k+1)           = mf_qtforcdn_nadv(k)
              mf_thlforc_output(i,pverp-k+1)            = mf_thlforc_nadv(k)
              mf_qtforc_output(i,pverp-k+1)             = mf_qtforc_nadv(k)
-             mf_sqtup_output(i,pverp-k+1)              = mf_sqtup(k)
-             mf_sqtdn_output(i,pverp-k+1)              = mf_sqtdn(k)
 
              mf_cloudfrac_output(i,pverp-k+1)          = mf_cloudfrac_zt(k)
              mf_ent_output(i,pverp-k+1)                = mf_ent_nadv(k)
