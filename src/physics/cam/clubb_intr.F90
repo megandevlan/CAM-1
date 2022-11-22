@@ -3037,6 +3037,13 @@ end subroutine clubb_init_cnst
                                                       thlm_zm_in, rtm_zm_in,  thv_ds_zm,      & ! input
                                                       th_zm,      qv_zm,      qc_zm,          & ! input
                                          th_sfc,      wpthlp_sfc, wprtp_sfc,  pblh(i),        & ! input
+                              ! +++ MDF 
+                              size(cam_in%lnd_areaPatch(i,:)), cam_in%landfrac(i),            & ! input
+                              cam_in%lnd_areaPatch(i,:),                                      & ! input
+                              cam_in%lndFlx_shflxPatch(i,:)/(cpair*rho_ds_zm(1)),             & ! input
+                              cam_in%lndFlx_lhflxPatch(i,:)/rho_ds_zm(1),                     & ! input
+                              cam_in%lnd_fvPatch(i,:),                                        & ! input
+                              ! --- MDF
                               wpthlp_in, tke_in,      tpert(i),   mf_ztopm1,  rhinv,          & ! input                     
                               mf_cape_output(i),      mf_ddcp,                                & ! output - plume diagnostics
                               mf_upa,    mf_dna,                                              & ! output - plume diagnostics
