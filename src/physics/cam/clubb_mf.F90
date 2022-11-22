@@ -24,7 +24,10 @@ module clubb_mf
             do_clubb_mf_diag, &
             clubb_mf_nup, &
             do_clubb_mf_rad, &
-            clubb_mf_Lopt
+            clubb_mf_Lopt, &
+            clubb_mf_ddalph, &
+            clubb_mf_up_ndt, &
+            clubb_mf_cp_ndt
 
   !
   ! Lopt 0 = fixed L0
@@ -44,10 +47,15 @@ module clubb_mf
   real(r8) :: clubb_mf_alphturb= 0._r8
   real(r8) :: clubb_mf_max_L0  = 0._r8
   real(r8) :: clubb_mf_fdd     = 0._r8
+  real(r8) :: clubb_mf_ddalph  = 0._r8  
+  real(r8) :: clubb_mf_ddbeta  = 0._r8
+  integer  :: clubb_mf_up_ndt  = 1
+  integer  :: clubb_mf_cp_ndt  = 1
   integer, protected :: clubb_mf_nup     = 0
   logical, protected :: do_clubb_mf = .false.
   logical, protected :: do_clubb_mf_diag = .false.
   logical, protected :: do_clubb_mf_rad = .false.
+  logical, protected :: do_clubb_mf_coldpool = .false.
   logical :: do_clubb_mf_precip = .false.
   logical :: tht_tweaks = .true.
   integer :: mf_num_cin = 5
@@ -72,7 +80,7 @@ module clubb_mf
 
     namelist /clubb_mf_nl/ clubb_mf_Lopt, clubb_mf_a0, clubb_mf_b0, clubb_mf_L0, clubb_mf_ent0, clubb_mf_alphturb, &
                            clubb_mf_nup, clubb_mf_max_L0, do_clubb_mf, do_clubb_mf_diag, do_clubb_mf_precip, do_clubb_mf_rad, &
-                           clubb_mf_fdd
+                           clubb_mf_fdd, do_clubb_mf_coldpool, clubb_mf_ddalph, clubb_mf_ddbeta, clubb_mf_up_ndt, clubb_mf_cp_ndt
 
     if (masterproc) then
       open( newunit=iunit, file=trim(nlfile), status='old' )
@@ -112,6 +120,16 @@ module clubb_mf
     if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: do_clubb_mf_rad")
     call mpi_bcast(clubb_mf_fdd,  1, mpi_real8,   mstrid, mpicom, ierr)
     if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_mf_fdd")
+    call mpi_bcast(do_clubb_mf_coldpool, 1, mpi_logical, mstrid, mpicom, ierr)
+    if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: do_clubb_mf_coldpool")
+    call mpi_bcast(clubb_mf_ddalph,  1, mpi_real8,   mstrid, mpicom, ierr)
+    if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_mf_ddalph")
+    call mpi_bcast(clubb_mf_ddbeta,  1, mpi_real8,   mstrid, mpicom, ierr)
+    if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_mf_ddbeta")
+    call mpi_bcast(clubb_mf_up_ndt, 1, mpi_integer, mstrid, mpicom, ierr)
+    if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_mf_up_ndt")
+    call mpi_bcast(clubb_mf_cp_ndt, 1, mpi_integer, mstrid, mpicom, ierr)
+    if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_mf_cp_ndt")
 
     if ((.not. do_clubb_mf) .and. do_clubb_mf_diag ) then
        call endrun('clubb_mf_readnl: Error - cannot turn on do_clubb_mf_diag without also turning on do_clubb_mf')
@@ -128,10 +146,6 @@ module clubb_mf
                                              thl_zm,  qt_zm,     thv_zm,            & ! input
                                              th_zm,   qv_zm,     qc_zm,             & ! input
                                        ths,  wthl,    wqt,       pblh,              & ! input
-              ! +++ MDF
-                           npft, landfracFromSfc, patchArea,                        & ! input
-                           patchSH, patchLH, patchFV,                               & ! input 
-              ! --- MDF
                            wpthlp_env, tke,  tpert,  ztopm1,     rhinv,             & ! input
                            mcape,      ddcp,                                        & ! output
                            upa,     dna,                                            & ! output
@@ -215,14 +229,6 @@ module clubb_mf
      real(r8), intent(in)                :: pblh,tpert
      real(r8), intent(in)                :: rhinv
      real(r8), intent(in)                :: ths
-
-     !+++ MDF 
-     integer, intent(in)                     :: npft
-     real(r8), intent(in)                    :: landfracFromSfc
-     real(r8), dimension(npft), intent(in)   :: patchArea, patchSH, &
-                                                patchLH, patchFV 
-     !--- MDF 
-
      real(r8), intent(inout)             :: ztopm1,ddcp
 
      real(r8),dimension(nz,clubb_mf_nup), intent(out) :: upa,     & ! momentum grid
@@ -362,12 +368,6 @@ module clubb_mf
                                                thln0,   qtn0,    wn0,     &
                                                entn,    detn,    mfn,     &
                                                ee2,     ud2
-     ! +++ MDF
-     ! surface patch variables 
-     integer                                :: p, patchPlumes, patchPlumesTotal 
-     real(r8)                               :: wthvPatch
-     ! --- MDF 
-
      !
      ! parameters defining initial conditions for updrafts
      real(r8),parameter                   :: pwmin = 1.5_r8,           &
@@ -426,14 +426,8 @@ module clubb_mf
      ! minimum downdraft speed
      real(r8),parameter                   :: mindnw = 1.E-2_r8
      !
-     ! turn on cold-pool feedbacks
-     logical                              :: coldpool = .false.
-
-     ! +++ MDF 
-     ! use patch data to initiate plumes over land 
-     logical                              :: patchInit = .true.
-     ! logical                              :: patchInit = .false.
-     ! --- MDF 
+     ! limiter on cold pool effects
+     real(r8),parameter                   :: max_cpfac = 5._r8
 
      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
      !!!!!!!!!!!!!!!!!!!!!! BEGIN CODE !!!!!!!!!!!!!!!!!!!!!!!
@@ -541,10 +535,6 @@ module clubb_mf
 
      dynamic_L0 = 0._r8
      ztop = 0._r8
-
-     ! +++ MDF 
-     patchPlumesTotal = 0
-     ! --- MDF
 
      if (bsort) then
        niter_xc = 3
@@ -655,7 +645,6 @@ module clubb_mf
        ! --------------------------------------------------------- !
        ! Initialize using Deardorff convective velocity scale      ! 
        ! --------------------------------------------------------- !
-
        convh = max(pblh,pblhmin)
        wstar = max( wstarmin, (gravit/thv(1)*wthv*convh)**(1._r8/3._r8) )
 
@@ -664,7 +653,7 @@ module clubb_mf
        ! --------------------------------------------------------- !
 
        cpfac = 1._r8
-       if (coldpool) cpfac = max(ddcp/wstar,1._r8)  
+       if (do_clubb_mf_coldpool) cpfac = min( (max(ddcp/wstar,1._r8))**clubb_mf_ddbeta, max_cpfac ) 
  
        ! affect the entrainmnet length scale
        dynamic_L0 = dynamic_L0 * cpfac
@@ -678,110 +667,32 @@ module clubb_mf
        ! and initialize plume thv, qt, w                           !
        ! --------------------------------------------------------- !
 
-     !  qstar   = wqt / wstar
-     !  thvstar = wthv / wstar
+       qstar   = wqt / wstar
+       thvstar = wthv / wstar
 
-     !  sigmaw   = alphw * wstar * cpfac
-     !  sigmaqt  = alphqt * abs(qstar) * cpfac
-     !  sigmathv = alphthv * abs(thvstar) * cpfac
+       sigmaw   = alphw * wstar * cpfac
+       sigmaqt  = alphqt * abs(qstar) * cpfac
+       sigmathv = alphthv * abs(thvstar) * cpfac
 
-     !  wmin = sigmaw * pwmin
-     !  wmax = sigmaw * pwmax
+       wmin = sigmaw * pwmin
+       wmax = sigmaw * pwmax
 
-       ! +++ MDF 
-       write(iulog,*)'MDF: You are at line 672 in clubb_mf.'
+       do i=1,clubb_mf_nup
+         wlv = wmin + (wmax-wmin) / (real(clubb_mf_nup,r8)) * (real(i-1, r8))
+         wtv = wmin + (wmax-wmin) / (real(clubb_mf_nup,r8)) * real(i,r8)
 
-       ! Check if we're initiating plumes on distinct surface patches  
-       if (patchInit .and. landfracFromSfc==1.0_r8 .and. (.not. is_first_step())) then
+         upw(1,i) = 0.5_r8 * (wlv+wtv)
+         upa(1,i) = 0.5_r8 * erf( wtv/(sqrt(2._r8)*sigmaw) ) &
+                    - 0.5_r8 * erf( wlv/(sqrt(2._r8)*sigmaw) )
 
-          ! Loop over surface patches 
-          ! TODO: Start with patch that has largest area; then next largest, and
-          ! so on. 
-          do p=1,npft 
-             write(iulog,*)'MDF: patch area and wthv',patchArea(p),patchSH(p)
+         upmf(1,i)= rho_zm(1)*upa(1,i)*upw(1,i)
 
-             ! Check if patch is active (has an area in the gridcell) 
-             if (patchArea(p) > 0 .and. patchArea(p)<=1) then 
+         upu(1,i) = u(1)
+         upv(1,i) = v(1)
 
-                ! Number of plumes to initiate on this particular patch
-                patchPlumes = nint(clubb_mf_nup * patchArea(p))
-                write(iulog,*)'MDF: This patch will generate n plumes: ',patchPlumes 
-
-                ! If we still have plumes we can allocate, initiate them over
-                ! this surface patch 
-                if (patchPlumesTotal < clubb_mf_nup ) then 
-                   ! surface buoyancy flux
-                   ! wthv = wthl+zvir*ths*wqt
-                   wthvPatch = patchSH(p)+zvir*ths*patchLH(p)
-
-                   qstar   = patchLH(p)/patchFV(p)
-                   thvstar = wthvPatch/patchFV(p) 
-
-                   sigmaw   = alphw * wstar * cpfac
-                   sigmaqt  = alphqt * abs(qstar) * cpfac
-                   sigmathv = alphthv * abs(thvstar) * cpfac
-
-                   wmin = sigmaw * pwmin
-                   wmax = sigmaw * pwmax 
-
-                   do i=patchPlumesTotal+1, patchPlumesTotal+patchPlumes
-                      write(iulog,*)'MDF: initiate plume i over patch p',i,p
-                      
-                      wlv = wmin + (wmax-wmin) / (real(clubb_mf_nup,r8)) * (real(i-1, r8))
-                      wtv = wmin + (wmax-wmin) / (real(clubb_mf_nup,r8)) * real(i,r8)
-
-                      upw(1,i) = 0.5_r8 * (wlv+wtv)
-                      upa(1,i) = 0.5_r8 * erf( wtv/(sqrt(2._r8)*sigmaw) ) &
-                               - 0.5_r8 * erf( wlv/(sqrt(2._r8)*sigmaw) )
-
-                      upmf(1,i)= rho_zm(1)*upa(1,i)*upw(1,i)
-
-                      upu(1,i) = u(1)
-                      upv(1,i) = v(1)
-
-                      upqt(1,i)  = cwqt * upw(1,i) * sigmaqt/sigmaw
-                      upthv(1,i) = cwthv * upw(1,i) * sigmathv/sigmaw
-
-                   end do               
-                end if
-
-                ! Track how many patch-based plumes we've initiated so far 
-                patchPlumesTotal = patchPlumesTotal + patchPlumes 
-                write(iulog,*)'MDF: patchPlumesTotal = ',patchPlumesTotal
-
-             end if
-          end do
-       else 
-          ! If not trying to do everything by patch, keep the set-up the same as
-          ! before 
-          qstar   = wqt / wstar
-          thvstar = wthv / wstar
-
-          sigmaw   = alphw * wstar * cpfac
-          sigmaqt  = alphqt * abs(qstar) * cpfac
-          sigmathv = alphthv * abs(thvstar) * cpfac
-
-          wmin = sigmaw * pwmin
-          wmax = sigmaw * pwmax
-
-          do i=1,clubb_mf_nup
-            wlv = wmin + (wmax-wmin) / (real(clubb_mf_nup,r8)) * (real(i-1, r8))
-            wtv = wmin + (wmax-wmin) / (real(clubb_mf_nup,r8)) * real(i,r8)
-
-            upw(1,i) = 0.5_r8 * (wlv+wtv)
-            upa(1,i) = 0.5_r8 * erf( wtv/(sqrt(2._r8)*sigmaw) ) &
-                      - 0.5_r8 * erf( wlv/(sqrt(2._r8)*sigmaw) )
-
-            upmf(1,i)= rho_zm(1)*upa(1,i)*upw(1,i)
-
-            upu(1,i) = u(1)
-            upv(1,i) = v(1)
-            
-            upqt(1,i)  = cwqt * upw(1,i) * sigmaqt/sigmaw
-            upthv(1,i) = cwthv * upw(1,i) * sigmathv/sigmaw
-          end do
-       end if 
-
+         upqt(1,i)  = cwqt * upw(1,i) * sigmaqt/sigmaw
+         upthv(1,i) = cwthv * upw(1,i) * sigmathv/sigmaw
+       enddo
 
        facqtu=1._r8
        facthvu=1._r8
@@ -879,6 +790,11 @@ module clubb_mf
                  thln = 0.5_r8*(thln + thln0)
                  wn = 0.5_r8*(wn + wn0)
                end if
+
+               ! save this iteration
+               qtn0  = qtn
+               thln0 = thln
+               wn0 = wn
 
                ! --------------------------------------------------------- !
                ! Compute excess water to derive neutral mixing fraction    ! 
@@ -979,11 +895,6 @@ module clubb_mf
                eturb = (1._r8 + clubb_mf_alphturb*sqrt(tke(k))/upw(k,i))
              end if
              entn = entn * eturb
-
-             ! save this iteration
-             qtn0  = qtn
-             thln0 = thln
-             wn0 = wn
 
              ! integrate updraft
              entexp  = exp(-entn*eturb*dzt(k+1))
@@ -1355,6 +1266,7 @@ module clubb_mf
            sqt(k) = 0_r8
            sthl(k) = 0._r8
            ztopm1 = zm(1)
+           ddcp = 0._r8
            return
          end if
          ! height of the plume ensemble
@@ -1436,6 +1348,9 @@ module clubb_mf
          qtflx (k)  = qtflxup (k) + qtflxdn (k)
        enddo
 
+     else
+       ddcp = 0._r8
+       ztopm1 = zm(1)
      end if  ! ( wthv > 0.0 )
 
   end subroutine integrate_mf
