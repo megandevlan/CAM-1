@@ -1266,7 +1266,6 @@ module clubb_mf
            sqt(k) = 0_r8
            sthl(k) = 0._r8
            ztopm1 = zm(1)
-           ddcp = 0._r8
            return
          end if
          ! height of the plume ensemble
@@ -1348,9 +1347,6 @@ module clubb_mf
          qtflx (k)  = qtflxup (k) + qtflxdn (k)
        enddo
 
-     else
-       ddcp = 0._r8
-       ztopm1 = zm(1)
      end if  ! ( wthv > 0.0 )
 
   end subroutine integrate_mf

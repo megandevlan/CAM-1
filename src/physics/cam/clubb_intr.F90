@@ -2960,12 +2960,6 @@ end subroutine clubb_init_cnst
         if (macmic_it==1) ztopm1_macmic(i) = 0._r8
         if (macmic_it==1) ddcp_macmic(i) = 0._r8
 
-!+++ARH - Temporary hack - pbuf_set_field is apparently not taking?
-        if (is_first_step()) then
-          ddcp(i) = 0._r8
-        end if
-!---ARH
-
         mf_precc_nadv             = 0._r8
         mf_snow_nadv              = 0._r8
 
