@@ -24,6 +24,9 @@ module clubb_mf
             do_clubb_mf_diag, &
             clubb_mf_nup, &
             do_clubb_mf_rad, &
+            ! +++ MDF
+            do_clubb_mf_patchInit, &
+            ! --- MDF
             clubb_mf_Lopt
 
   !
@@ -49,6 +52,10 @@ module clubb_mf
   logical, protected :: do_clubb_mf_diag = .false.
   logical, protected :: do_clubb_mf_rad = .false.
   logical :: do_clubb_mf_precip = .false.
+  ! +++ MDF 
+  ! Note: No idea if this should be 'protected' or not 
+  logical, protected :: do_clubb_mf_patchInit = .false.
+  ! --- MDF 
   logical :: tht_tweaks = .true.
   integer :: mf_num_cin = 5
 
@@ -72,6 +79,9 @@ module clubb_mf
 
     namelist /clubb_mf_nl/ clubb_mf_Lopt, clubb_mf_a0, clubb_mf_b0, clubb_mf_L0, clubb_mf_ent0, clubb_mf_alphturb, &
                            clubb_mf_nup, clubb_mf_max_L0, do_clubb_mf, do_clubb_mf_diag, do_clubb_mf_precip, do_clubb_mf_rad, &
+                           ! +++ MDF
+                           do_clubb_mf_patchInit, &
+                           ! --- MDF
                            clubb_mf_fdd
 
     if (masterproc) then
@@ -110,6 +120,10 @@ module clubb_mf
     if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: do_clubb_mf_precip")
     call mpi_bcast(do_clubb_mf_rad, 1, mpi_logical, mstrid, mpicom, ierr)
     if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: do_clubb_mf_rad")
+    ! +++ MDF 
+    call mpi_bcast(do_clubb_mf_patchInit, 1, mpi_logical, mstrid, mpicom, ierr)
+    if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: do_clubb_mf_patchInit")
+    ! --- MDF 
     call mpi_bcast(clubb_mf_fdd,  1, mpi_real8,   mstrid, mpicom, ierr)
     if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_mf_fdd")
 
@@ -117,6 +131,11 @@ module clubb_mf
        call endrun('clubb_mf_readnl: Error - cannot turn on do_clubb_mf_diag without also turning on do_clubb_mf')
     end if
     
+    ! +++ MDF 
+    if ((.not. do_clubb_mf) .and. do_clubb_mf_patchInit ) then
+       call endrun('clubb_mf_readnl: Error - cannot turn on do_clubb_mf_patchInit without also turning on do_clubb_mf')
+    end if
+    ! --- MDF  
 
   end subroutine clubb_mf_readnl
 
@@ -429,12 +448,6 @@ module clubb_mf
      ! turn on cold-pool feedbacks
      logical                              :: coldpool = .false.
 
-     ! +++ MDF 
-     ! use patch data to initiate plumes over land 
-     logical                              :: patchInit = .true.
-     ! logical                              :: patchInit = .false.
-     ! --- MDF 
-
      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
      !!!!!!!!!!!!!!!!!!!!!! BEGIN CODE !!!!!!!!!!!!!!!!!!!!!!!
      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -692,7 +705,7 @@ module clubb_mf
        write(iulog,*)'MDF: You are at line 672 in clubb_mf.'
 
        ! Check if we're initiating plumes on distinct surface patches  
-       if (patchInit .and. landfracFromSfc==1.0_r8 .and. (.not. is_first_step())) then
+       if (do_clubb_mf_patchInit .and. landfracFromSfc==1.0_r8 .and. (.not. is_first_step())) then
 
           ! Loop over surface patches 
           ! TODO: Start with patch that has largest area; then next largest, and
