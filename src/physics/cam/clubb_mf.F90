@@ -654,7 +654,7 @@ module clubb_mf
        ! --------------------------------------------------------- !
 
        cpfac = 1._r8
-       if (do_clubb_mf_coldpool) cpfac = min( (max(ddcp/wstar,1._r8))**clubb_mf_ddbeta, max_cpfac ) 
+       if (do_clubb_mf_coldpool) cpfac = ( min(max(ddcp/wstar,1._r8),max_cpfac) )**clubb_mf_ddbeta 
  
        ! affect the entrainmnet length scale
        dynamic_L0 = dynamic_L0 * cpfac
