@@ -149,7 +149,7 @@ module clubb_mf
                                        ths,  wthl,    wqt,       pblh,              & ! input
               ! +++ MDF
                            npft, landfracFromSfc, patchArea,                        & ! input
-                           patchSH, patchLH, patchFV,                               & ! input 
+                           patchSH, patchLH, patchFV, patchTHS,                     & ! input 
               ! --- MDF
                            wpthlp_env, tke,  tpert,  ztopm1,     rhinv,             & ! input
                            mcape,      ddcp,                                        & ! output
@@ -239,7 +239,7 @@ module clubb_mf
      integer, intent(in)                     :: npft
      real(r8), intent(in)                    :: landfracFromSfc
      real(r8), dimension(npft), intent(in)   :: patchArea, patchSH, &
-                                                patchLH, patchFV 
+                                                patchLH, patchFV, patchTHS 
      !--- MDF 
 
      real(r8), intent(inout)             :: ztopm1,ddcp
@@ -702,7 +702,7 @@ module clubb_mf
      !  wmax = sigmaw * pwmax
 
        ! +++ MDF 
-       write(iulog,*)'MDF: You are at line 672 in clubb_mf.'
+       !write(iulog,*)'MDF: You are right above the patch-leve loop in clubb_mf.'
 
        ! Check if we're initiating plumes on distinct surface patches  
        if (do_clubb_mf_patchInit .and. landfracFromSfc==1.0_r8 .and. (.not. is_first_step())) then
@@ -711,22 +711,22 @@ module clubb_mf
           ! TODO: Start with patch that has largest area; then next largest, and
           ! so on. 
           do p=1,npft 
-             write(iulog,*)'MDF: patch area and wthv',patchArea(p),patchSH(p)
+             write(iulog,*)'MDF (debug): patch area ',patchArea(p)
 
              ! Check if patch is active (has an area in the gridcell) 
              if (patchArea(p) > 0 .and. patchArea(p)<=1) then 
 
                 ! Number of plumes to initiate on this particular patch
                 patchPlumes = nint(clubb_mf_nup * patchArea(p))
-                write(iulog,*)'MDF: This patch will generate n plumes: ',patchPlumes 
+                !write(iulog,*)'MDF: This patch will generate n plumes: ',patchPlumes 
 
                 ! If we still have plumes we can allocate, initiate them over
                 ! this surface patch 
                 if (patchPlumesTotal < clubb_mf_nup ) then 
                    ! surface buoyancy flux
                    ! wthv = wthl+zvir*ths*wqt
-                   wthvPatch = patchSH(p)+zvir*ths*patchLH(p)
-
+                   wthvPatch = patchSH(p)+zvir*patchTHS(p)*patchLH(p)
+                   
                    qstar   = patchLH(p)/patchFV(p)
                    thvstar = wthvPatch/patchFV(p) 
 
@@ -736,6 +736,17 @@ module clubb_mf
 
                    wmin = sigmaw * pwmin
                    wmax = sigmaw * pwmax 
+
+                   ! More debug options
+                   write(iulog,*)'MDF (debug): wthvPatch = ',wthvPatch
+                   write(iulog,*)'MDF (debug): patchLH = ',patchLH(p)
+                   write(iulog,*)'MDF (debug): patchSH = ',patchSH(p)
+                   write(iulog,*)'MDF (debug): patchFV = ',patchFV(p)
+                   write(iulog,*)'MDF (debug): qstar   = ',qstar
+                   write(iulog,*)'MDF (debug): thvstar = ',thvstar
+                   write(iulog,*)'MDF (debug): sigmaqt = ',sigmaqt
+                   write(iulog,*)'MDF (debug): sigmathv = ',sigmathv
+
 
                    do i=patchPlumesTotal+1, patchPlumesTotal+patchPlumes
                       write(iulog,*)'MDF: initiate plume i over patch p',i,p
@@ -776,6 +787,16 @@ module clubb_mf
 
           wmin = sigmaw * pwmin
           wmax = sigmaw * pwmax
+
+          ! More debug options
+          write(iulog,*)'MDF (debug): wthv = ',wthv
+          write(iulog,*)'MDF (debug): wthl = ',wthl
+          write(iulog,*)'MDF (debug): wqt = ',wqt
+          write(iulog,*)'MDF (debug): wstar = ',wstar
+          write(iulog,*)'MDF (debug): qstar   = ',qstar
+          write(iulog,*)'MDF (debug): thvstar = ',thvstar
+          write(iulog,*)'MDF (debug): sigmaqt = ',sigmaqt
+          write(iulog,*)'MDF (debug): sigmathv = ',sigmathv
 
           do i=1,clubb_mf_nup
             wlv = wmin + (wmax-wmin) / (real(clubb_mf_nup,r8)) * (real(i-1, r8))

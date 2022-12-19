@@ -3043,6 +3043,7 @@ end subroutine clubb_init_cnst
                               cam_in%lndFlx_shflxPatch(i,:)/(cpair*rho_ds_zm(1)),             & ! input
                               cam_in%lndFlx_lhflxPatch(i,:)/rho_ds_zm(1),                     & ! input
                               cam_in%lnd_fvPatch(i,:),                                        & ! input
+                              cam_in%lnd_tsPatch(i,:)*invrs_exner_zm(1),                     & ! input 
                               ! --- MDF
                               wpthlp_in, tke_in,      tpert(i),   mf_ztopm1,  rhinv,          & ! input                     
                               mf_cape_output(i),      mf_ddcp,                                & ! output - plume diagnostics
