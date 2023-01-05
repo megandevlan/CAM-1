@@ -629,7 +629,7 @@ contains
              do i = 1,get_ncols_p(c)
                 do n = 1, size(fldptr2d, dim=1)
                    !cam_in(c)%eflx_sh_tot_patch(i,n) = fldptr2d(n,g) * med2mod_areacor(g)
-                   cam_in(c)%lndFlx_shflxPatch(i,n) = fldptr2d(n,g)
+                   cam_in(c)%lndFlx_shflxPatch(i,n) = -fldptr2d(n,g)
                 end do
                 g = g + 1
              end do
@@ -646,7 +646,7 @@ contains
           if ( associated(cam_in(c)%lndFlx_lhflxPatch) ) then
              do i = 1,get_ncols_p(c)
                 do n = 1, size(fldptr2d, dim=1)
-                   cam_in(c)%lndFlx_lhflxPatch(i,n) = fldptr2d(n,g)
+                   cam_in(c)%lndFlx_lhflxPatch(i,n) = -fldptr2d(n,g)
                 end do
                 g = g + 1
              end do
