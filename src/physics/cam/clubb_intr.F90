@@ -1357,6 +1357,9 @@ end subroutine clubb_init_cnst
       call addfld ( 'edmf_upent'    , (/ 'ilev', 'nens' /), 'A', '1/m'     , 'Plume updraft entrainment rate (EDMF)' )
       call addfld ( 'edmf_updet'    , (/ 'ilev', 'nens' /), 'A', '1/m'     , 'Plume updraft dettrainment rate (EDMF)' )
       call addfld ( 'edmf_upbuoy'   , (/  'ilev', 'nens' /), 'A', 'm/s2'   , 'Plume updraft buoyancy (EDMF)' )
+! +++ MDF
+      call addfld ( 'edmf_dna'      , (/ 'ilev', 'nens' /), 'A', 'fraction', 'Plume downdraft area fraction (EDMF)' )
+! --- MDF
       call addfld ( 'edmf_dnw'      , (/ 'ilev', 'nens' /), 'A', 'm/s'     , 'Plume downdraft vertical velocity (EDMF)' )
       call addfld ( 'edmf_dnthl'    , (/ 'ilev', 'nens' /), 'A', 'K'       , 'Plume downdraft liquid potential temperature (EDMF)' )
       call addfld ( 'edmf_dnqt'     , (/ 'ilev', 'nens' /), 'A', 'kg/kg'   , 'Plume downdraft total water mixing ratio (EDMF)' )
@@ -2075,11 +2078,17 @@ end subroutine clubb_init_cnst
                                                               mf_upbuoy_output
    ! MF plume level outputs
    real(r8), dimension(pcols,pverp,clubb_mf_nup) ::           mf_dnw_flip,         &
+ !+++ MDF 
+                                                              mf_dna_flip,         &
+ !--- MDF 
                                                               mf_dnthl_flip,       &
                                                               mf_dnqt_flip
 
    ! MF plume level outputs to outfld
    real(r8), dimension(pcols,pverp*clubb_mf_nup) ::           mf_dnw_output,       &
+ !+++ MDF 
+                                                              mf_dna_output,       & 
+ ! --- MDF
                                                               mf_dnthl_output,     &
                                                               mf_dnqt_output
 
@@ -2629,6 +2638,10 @@ end subroutine clubb_init_cnst
    mf_cape_output(:)        = 0._r8
    mf_cfl_output(:)         = 0._r8
    mf_dnw_output(:,:)       = 0._r8
+! +++ MDF
+   mf_dna_output(:,:)       = 0._r8
+   mf_dna_flip(:,:,:)       = 0._r8
+! --- MDF
    mf_dnthl_output(:,:)     = 0._r8
    mf_dnqt_output(:,:)      = 0._r8
    mf_dnw_flip(:,:,:)       = 0._r8
@@ -3459,6 +3472,9 @@ end subroutine clubb_init_cnst
            mf_updet_flip(i,pverp-k+1,:clubb_mf_nup)     = mf_updet(k,:clubb_mf_nup)
            mf_upbuoy_flip(i,pverp-k+1,:clubb_mf_nup)    = mf_upbuoy(k,:clubb_mf_nup)
            mf_dnw_flip(i,pverp-k+1,:clubb_mf_nup)       = mf_dnw(k,:clubb_mf_nup)
+           ! +++ MDF 
+           mf_dna_flip(i,pverp-k+1,:clubb_mf_nup)       = mf_dna(k,:clubb_mf_nup)
+           ! --- MDF
            mf_dnthl_flip(i,pverp-k+1,:clubb_mf_nup)     = mf_dnthl(k,:clubb_mf_nup)
            mf_dnqt_flip(i,pverp-k+1,:clubb_mf_nup)      = mf_dnqt(k,:clubb_mf_nup)
          end if
@@ -3485,6 +3501,9 @@ end subroutine clubb_init_cnst
           mf_updet_output(i,pverp*(k-1)+1:pverp*k) = mf_updet_flip(i,:pverp,k)
           mf_upbuoy_output(i,pverp*(k-1)+1:pverp*k)= mf_upbuoy_flip(i,:pverp,k)
           mf_dnw_output(i,pverp*(k-1)+1:pverp*k)   = mf_dnw_flip(i,:pverp,k)
+          ! +++ MDF 
+          mf_dna_output(i,pverp*(k-1)+1:pverp*k)   = mf_dna_flip(i,:pverp,k)
+          ! --- MDF
           mf_dnthl_output(i,pverp*(k-1)+1:pverp*k) = mf_dnthl_flip(i,:pverp,k)
           mf_dnqt_output(i,pverp*(k-1)+1:pverp*k)  = mf_dnqt_flip(i,:pverp,k)
         end do
@@ -4302,6 +4321,9 @@ end subroutine clubb_init_cnst
      call outfld( 'edmf_upbuoy'   , mf_upbuoy_output,          pcols, lchnk )
      call outfld( 'edmf_upent'    , mf_upent_output,           pcols, lchnk )
      call outfld( 'edmf_updet'    , mf_updet_output,           pcols, lchnk )
+! +++ MDF 
+     call outfld( 'edmf_dna'      , mf_dna_output,             pcols, lchnk )
+! --- MDF
      call outfld( 'edmf_dnw'      , mf_dnw_output,             pcols, lchnk )
      call outfld( 'edmf_dnthl'    , mf_dnthl_output,           pcols, lchnk )
      call outfld( 'edmf_dnqt'     , mf_dnqt_output,            pcols, lchnk )

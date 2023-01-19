@@ -712,6 +712,8 @@ module clubb_mf
           ! so on. 
           do p=1,npft 
              write(iulog,*)'MDF (debug): patch area ',patchArea(p)
+             write(iulog,*)'MDF (debug): patchLH = ',patchLH(p)
+             write(iulog,*)'MDF (debug): patchSH = ',patchSH(p)
 
              ! Check if patch is active (has an area in the gridcell) 
              if (patchArea(p) > 0 .and. patchArea(p)<=1) then 
@@ -738,14 +740,14 @@ module clubb_mf
                    wmax = sigmaw * pwmax 
 
                    ! More debug options
-                   write(iulog,*)'MDF (debug): wthvPatch = ',wthvPatch
-                   write(iulog,*)'MDF (debug): patchLH = ',patchLH(p)
-                   write(iulog,*)'MDF (debug): patchSH = ',patchSH(p)
-                   write(iulog,*)'MDF (debug): patchFV = ',patchFV(p)
-                   write(iulog,*)'MDF (debug): qstar   = ',qstar
-                   write(iulog,*)'MDF (debug): thvstar = ',thvstar
-                   write(iulog,*)'MDF (debug): sigmaqt = ',sigmaqt
-                   write(iulog,*)'MDF (debug): sigmathv = ',sigmathv
+                   !write(iulog,*)'MDF (debug): wthvPatch = ',wthvPatch
+                   !write(iulog,*)'MDF (debug): patchLH = ',patchLH(p)
+                   !write(iulog,*)'MDF (debug): patchSH = ',patchSH(p)
+                   !write(iulog,*)'MDF (debug): patchFV = ',patchFV(p)
+                   !write(iulog,*)'MDF (debug): qstar   = ',qstar
+                   !write(iulog,*)'MDF (debug): thvstar = ',thvstar
+                   !write(iulog,*)'MDF (debug): sigmaqt = ',sigmaqt
+                   !write(iulog,*)'MDF (debug): sigmathv = ',sigmathv
 
 
                    do i=patchPlumesTotal+1, patchPlumesTotal+patchPlumes
