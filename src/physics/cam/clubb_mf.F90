@@ -24,10 +24,17 @@ module clubb_mf
             do_clubb_mf_diag, &
             clubb_mf_nup, &
             do_clubb_mf_rad, &
+!<<<<<<< HEAD
             ! +++ MDF
             do_clubb_mf_patchInit, &
             ! --- MDF
-            clubb_mf_Lopt
+!            clubb_mf_Lopt
+!=======
+            clubb_mf_Lopt, &
+            clubb_mf_ddalph, &
+            clubb_mf_up_ndt, &
+            clubb_mf_cp_ndt
+!>>>>>>> adam/cam.clubbmf
 
   !
   ! Lopt 0 = fixed L0
@@ -47,10 +54,15 @@ module clubb_mf
   real(r8) :: clubb_mf_alphturb= 0._r8
   real(r8) :: clubb_mf_max_L0  = 0._r8
   real(r8) :: clubb_mf_fdd     = 0._r8
+  real(r8) :: clubb_mf_ddalph  = 0._r8  
+  real(r8) :: clubb_mf_ddbeta  = 0._r8
+  integer  :: clubb_mf_up_ndt  = 1
+  integer  :: clubb_mf_cp_ndt  = 1
   integer, protected :: clubb_mf_nup     = 0
   logical, protected :: do_clubb_mf = .false.
   logical, protected :: do_clubb_mf_diag = .false.
   logical, protected :: do_clubb_mf_rad = .false.
+  logical, protected :: do_clubb_mf_coldpool = .false.
   logical :: do_clubb_mf_precip = .false.
   ! +++ MDF 
   ! Note: No idea if this should be 'protected' or not 
@@ -79,10 +91,14 @@ module clubb_mf
 
     namelist /clubb_mf_nl/ clubb_mf_Lopt, clubb_mf_a0, clubb_mf_b0, clubb_mf_L0, clubb_mf_ent0, clubb_mf_alphturb, &
                            clubb_mf_nup, clubb_mf_max_L0, do_clubb_mf, do_clubb_mf_diag, do_clubb_mf_precip, do_clubb_mf_rad, &
+!<<<<<<< HEAD
                            ! +++ MDF
                            do_clubb_mf_patchInit, &
                            ! --- MDF
-                           clubb_mf_fdd
+!                           clubb_mf_fdd
+!=======
+                           clubb_mf_fdd, do_clubb_mf_coldpool, clubb_mf_ddalph, clubb_mf_ddbeta, clubb_mf_up_ndt, clubb_mf_cp_ndt
+!>>>>>>> adam/cam.clubbmf
 
     if (masterproc) then
       open( newunit=iunit, file=trim(nlfile), status='old' )
@@ -126,6 +142,16 @@ module clubb_mf
     ! --- MDF 
     call mpi_bcast(clubb_mf_fdd,  1, mpi_real8,   mstrid, mpicom, ierr)
     if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_mf_fdd")
+    call mpi_bcast(do_clubb_mf_coldpool, 1, mpi_logical, mstrid, mpicom, ierr)
+    if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: do_clubb_mf_coldpool")
+    call mpi_bcast(clubb_mf_ddalph,  1, mpi_real8,   mstrid, mpicom, ierr)
+    if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_mf_ddalph")
+    call mpi_bcast(clubb_mf_ddbeta,  1, mpi_real8,   mstrid, mpicom, ierr)
+    if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_mf_ddbeta")
+    call mpi_bcast(clubb_mf_up_ndt, 1, mpi_integer, mstrid, mpicom, ierr)
+    if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_mf_up_ndt")
+    call mpi_bcast(clubb_mf_cp_ndt, 1, mpi_integer, mstrid, mpicom, ierr)
+    if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_mf_cp_ndt")
 
     if ((.not. do_clubb_mf) .and. do_clubb_mf_diag ) then
        call endrun('clubb_mf_readnl: Error - cannot turn on do_clubb_mf_diag without also turning on do_clubb_mf')
@@ -445,8 +471,8 @@ module clubb_mf
      ! minimum downdraft speed
      real(r8),parameter                   :: mindnw = 1.E-2_r8
      !
-     ! turn on cold-pool feedbacks
-     logical                              :: coldpool = .false.
+     ! limiter on cold pool effects
+     real(r8),parameter                   :: max_cpfac = 5._r8
 
      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
      !!!!!!!!!!!!!!!!!!!!!! BEGIN CODE !!!!!!!!!!!!!!!!!!!!!!!
@@ -668,7 +694,6 @@ module clubb_mf
        ! --------------------------------------------------------- !
        ! Initialize using Deardorff convective velocity scale      ! 
        ! --------------------------------------------------------- !
-
        convh = max(pblh,pblhmin)
        wstar = max( wstarmin, (gravit/thv(1)*wthv*convh)**(1._r8/3._r8) )
 
@@ -677,7 +702,7 @@ module clubb_mf
        ! --------------------------------------------------------- !
 
        cpfac = 1._r8
-       if (coldpool) cpfac = max(ddcp/wstar,1._r8)  
+       if (do_clubb_mf_coldpool) cpfac = min( (max(ddcp/wstar,1._r8))**clubb_mf_ddbeta, max_cpfac ) 
  
        ! affect the entrainmnet length scale
        dynamic_L0 = dynamic_L0 * cpfac
@@ -916,6 +941,11 @@ module clubb_mf
                  wn = 0.5_r8*(wn + wn0)
                end if
 
+               ! save this iteration
+               qtn0  = qtn
+               thln0 = thln
+               wn0 = wn
+
                ! --------------------------------------------------------- !
                ! Compute excess water to derive neutral mixing fraction    ! 
                ! after Bretherton et al 2014                               !
@@ -1015,11 +1045,6 @@ module clubb_mf
                eturb = (1._r8 + clubb_mf_alphturb*sqrt(tke(k))/upw(k,i))
              end if
              entn = entn * eturb
-
-             ! save this iteration
-             qtn0  = qtn
-             thln0 = thln
-             wn0 = wn
 
              ! integrate updraft
              entexp  = exp(-entn*eturb*dzt(k+1))
@@ -1391,6 +1416,7 @@ module clubb_mf
            sqt(k) = 0_r8
            sthl(k) = 0._r8
            ztopm1 = zm(1)
+           ddcp = 0._r8
            return
          end if
          ! height of the plume ensemble
@@ -1472,6 +1498,9 @@ module clubb_mf
          qtflx (k)  = qtflxup (k) + qtflxdn (k)
        enddo
 
+     else
+       ddcp = 0._r8
+       ztopm1 = zm(1)
      end if  ! ( wthv > 0.0 )
 
   end subroutine integrate_mf
