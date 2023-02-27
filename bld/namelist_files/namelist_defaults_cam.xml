@@ -1957,6 +1957,10 @@
 <do_clubb_mf_coldpool              > .false  </do_clubb_mf_coldpool>
 <clubb_mf_ddalph                   > 2.e2    </clubb_mf_ddalph>
 <clubb_mf_ddbeta                   > 1.0     </clubb_mf_ddbeta>
+<clubb_mf_pwfac                    > 1.0     </clubb_mf_pwfac>
+<do_clubb_mf_ustar                 > .false. </do_clubb_mf_ustar>
+<clubb_mf_up_ndt                   > 1       </clubb_mf_up_ndt>
+<clubb_mf_cp_ndt                   > 1       </clubb_mf_cp_ndt>
 
 <!-- Microphysics scheme -->
 <micro_mg_do_hail                       > .false. </micro_mg_do_hail>

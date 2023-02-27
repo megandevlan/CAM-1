@@ -6,5 +6,19 @@ do_clubb_mf=.true.
 do_clubb_mf_diag=.true.
 do_clubb_mf_rad=.true.
 do_clubb_mf_precip=.true.
-clubb_mf_Lopt=3
 deep_scheme='off'
+
+clubb_mf_nup = 25
+
+clubb_mf_Lopt = 6
+clubb_mf_up_ndt = 1
+clubb_mf_a0 = 2.0D0
+clubb_mf_b0 = 0.5D0
+clubb_mf_alphturb = 0.0D0
+clubb_mf_max_L0 = 733.34D0
+
+clubb_mf_fdd = 0.5
+do_clubb_mf_coldpool = .true.
+clubb_mf_cp_ndt = 1
+clubb_mf_ddalph = 250.
+clubb_mf_ddbeta = 1.0

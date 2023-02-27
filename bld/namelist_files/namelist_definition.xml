@@ -3966,6 +3966,17 @@ Default: 200.0
 Exponent enhancement factor to the downdrafts used for the cold pool calculations
 Default: 1.0
 
+<entry id="clubb_mf_pwfac" type="real" category="conv"
+       group="clubb_mf_nl" valid_values="" >
+Enhancement factor for the near surface pressure drag term in downdraft equation
+Default: 1.0
+
+<entry id="do_clubb_mf_ustar" type="logical" category="conv"
+       group="clubb_mf_nl" valid_values="" >
+If .true. use ustar for initializing the plume ensemble
+Default: .false.
+</entry>
+
 <entry id="clubb_mf_up_ndt" type="integer" category="conv"
        group="clubb_mf_nl" valid_values="" >
 Real: number of time-steps for running average of the convective height scale

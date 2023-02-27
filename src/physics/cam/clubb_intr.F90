@@ -22,6 +22,9 @@ module clubb_intr
   use phys_control,  only: phys_getopts
   use physconst,     only: rairv, cpairv, cpair, gravit, latvap, latice, zvir, rh2o, karman, rhoh2o
   use physconst,     only: rga
+!+++ARH
+  use shr_const_mod,   only: shr_const_pi
+!---ARH
   use spmd_utils,    only: masterproc 
   use spmd_utils,    only: iam
   use time_manager,  only: get_nstep
@@ -275,8 +278,11 @@ module clubb_intr
     dnifzm_idx = -1       ! ZM detrained convective cloud ice num concen.
 
   integer :: &
-    qt_macmic_idx, &
-    thl_macmic_idx, &
+!+++ARH
+    qtm_macmic1_idx, &
+    qtm_macmic2_idx, &
+    thlm_macmic1_idx, &
+    thlm_macmic2_idx, &
     rcm_macmic_idx, &
     cldfrac_macmic_idx, &
     wpthlp_macmic_idx, &
@@ -284,7 +290,36 @@ module clubb_intr
     wpthvp_macmic_idx, &
     mf_wpthlp_macmic_idx, &
     mf_wprtp_macmic_idx, &
-    mf_wpthvp_macmic_idx
+    mf_wpthvp_macmic_idx, &
+    up_macmic1_idx, &
+    up_macmic2_idx, &
+    dn_macmic1_idx, &
+    dn_macmic2_idx, &
+    thlu_macmic1_idx, &
+    thlu_macmic2_idx, &
+    qtu_macmic1_idx, &
+    qtu_macmic2_idx, &
+    thld_macmic1_idx, &
+    thld_macmic2_idx, &
+    qtd_macmic1_idx, &
+    qtd_macmic2_idx, &
+    dthl_macmic1_idx, &
+    dthl_macmic2_idx, &
+    dqt_macmic1_idx, &
+    dqt_macmic2_idx, &
+    dthlu_macmic1_idx, &
+    dthlu_macmic2_idx, &
+    dqtu_macmic1_idx, &
+    dqtu_macmic2_idx, &
+    dthld_macmic1_idx, &
+    dthld_macmic2_idx, &
+    dqtd_macmic1_idx, &
+    dqtd_macmic2_idx, &
+    ztop_macmic1_idx, &
+    ztop_macmic2_idx, &
+    ddcp_macmic1_idx, &
+    ddcp_macmic2_idx
+!---ARH
 
   integer :: &
     prec_sh_idx, &
@@ -429,8 +464,12 @@ module clubb_intr
     call add_hist_coord('ncyc', cld_macmic_num_steps, 'macro/micro cycle index')
     call add_hist_coord('nens', clubb_mf_nup, 'clubb+mf ensemble size')
 
-    call pbuf_add_field('QT_macmic'           ,'physpkg',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps/), qt_macmic_idx)
-    call pbuf_add_field('THETAL_macmic'       ,'physpkg',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps/), thl_macmic_idx)
+!+++ARH
+    call pbuf_add_field('qtm_macmic1'           ,'physpkg',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps/), qtm_macmic1_idx)
+    call pbuf_add_field('qtm_macmic2'           ,'physpkg',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps/), qtm_macmic2_idx)
+    call pbuf_add_field('thlm_macmic1'       ,'physpkg',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps/), thlm_macmic1_idx)
+    call pbuf_add_field('thlm_macmic2'       ,'physpkg',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps/), thlm_macmic2_idx)
+!---ARH
     call pbuf_add_field('RCM_CLUBB_macmic'    ,'physpkg',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps/), rcm_macmic_idx)
     call pbuf_add_field('CLDFRAC_CLUBB_macmic','physpkg',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps/), cldfrac_macmic_idx)
     call pbuf_add_field('WPTHLP_CLUBB_macmic' ,'physpkg',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps/), wpthlp_macmic_idx)
@@ -446,6 +485,34 @@ module clubb_intr
       call pbuf_add_field('DDCP'               ,'global' ,  dtype_r8, (/pcols/), ddcp_idx)
       call pbuf_add_field('DDCP_MACMIC'        ,'physpkg',  dtype_r8, (/pcols/), ddcp_macmic_idx)
       call pbuf_add_field('DDCPMN'             ,'global' ,  dtype_r8, (/clubb_mf_cp_ndt,pcols/), ddcpmn_idx)
+      call pbuf_add_field('up_macmic1' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps*clubb_mf_nup/), up_macmic1_idx)
+      call pbuf_add_field('up_macmic2' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps*clubb_mf_nup/), up_macmic2_idx)
+      call pbuf_add_field('dn_macmic1' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps*clubb_mf_nup/), dn_macmic1_idx)
+      call pbuf_add_field('dn_macmic2' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps*clubb_mf_nup/), dn_macmic2_idx)
+      call pbuf_add_field('thlu_macmic1' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps*clubb_mf_nup/), thlu_macmic1_idx)
+      call pbuf_add_field('thlu_macmic2' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps*clubb_mf_nup/), thlu_macmic2_idx)
+      call pbuf_add_field('qtu_macmic1' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps*clubb_mf_nup/), qtu_macmic1_idx)
+      call pbuf_add_field('qtu_macmic2' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps*clubb_mf_nup/), qtu_macmic2_idx)
+      call pbuf_add_field('thld_macmic1' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps*clubb_mf_nup/), thld_macmic1_idx)
+      call pbuf_add_field('thld_macmic2' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps*clubb_mf_nup/), thld_macmic2_idx)
+      call pbuf_add_field('qtd_macmic1' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps*clubb_mf_nup/), qtd_macmic1_idx)
+      call pbuf_add_field('qtd_macmic2' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps*clubb_mf_nup/), qtd_macmic2_idx)
+      call pbuf_add_field('dthl_macmic1' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps*clubb_mf_nup/), dthl_macmic1_idx)
+      call pbuf_add_field('dthl_macmic2' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps*clubb_mf_nup/), dthl_macmic2_idx)
+      call pbuf_add_field('dqt_macmic1' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps*clubb_mf_nup/), dqt_macmic1_idx)
+      call pbuf_add_field('dqt_macmic2' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps*clubb_mf_nup/), dqt_macmic2_idx)
+      call pbuf_add_field('dthlu_macmic1' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps/), dthlu_macmic1_idx)
+      call pbuf_add_field('dthlu_macmic2' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps/), dthlu_macmic2_idx)
+      call pbuf_add_field('dqtu_macmic1' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps/), dqtu_macmic1_idx)
+      call pbuf_add_field('dqtu_macmic2' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps/), dqtu_macmic2_idx)
+      call pbuf_add_field('dthld_macmic1' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps/), dthld_macmic1_idx)
+      call pbuf_add_field('dthld_macmic2' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps/), dthld_macmic2_idx)
+      call pbuf_add_field('dqtd_macmic1' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps/), dqtd_macmic1_idx)
+      call pbuf_add_field('dqtd_macmic2' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps/), dqtd_macmic2_idx)
+      call pbuf_add_field('ztop_macmic1' ,'global',  dtype_r8, (/pcols,cld_macmic_num_steps/), ztop_macmic1_idx)
+      call pbuf_add_field('ztop_macmic2' ,'global',  dtype_r8, (/pcols,cld_macmic_num_steps/), ztop_macmic2_idx)
+      call pbuf_add_field('ddcp_macmic1' ,'global',  dtype_r8, (/pcols,cld_macmic_num_steps/), ddcp_macmic1_idx)
+      call pbuf_add_field('ddcp_macmic2' ,'global',  dtype_r8, (/pcols,cld_macmic_num_steps/), ddcp_macmic2_idx)
     end if
 
 #endif 
@@ -1337,9 +1404,11 @@ end subroutine clubb_init_cnst
       call addfld ( 'edmf_rcm'      , (/ 'ilev' /), 'A', 'kg/kg'   , 'grid mean cloud (EDMF)' )
       call addfld ( 'edmf_cloudfrac', (/ 'lev' /),  'A', 'fraction', 'grid mean cloud fraction (EDMF)' )
       call addfld ( 'edmf_ent'      , (/ 'lev' /),  'A', '1/m'     , 'ensemble mean entrainment (EDMF)' )
+!+++ARH
       call addfld ( 'edmf_ztop'     ,  horiz_only,  'A', 'm'       , 'edmf ztop',       flag_xyfill=.True.)
       call addfld ( 'edmf_ddcp'     ,  horiz_only,  'A', 'm/s'     , 'edmf ddcp',       flag_xyfill=.True.)
       call addfld ( 'edmf_L0'       ,  horiz_only,  'A', 'm'       , 'edmf dynamic L0', flag_xyfill=.True.)
+!---ARH
       call addfld ( 'edmf_cfl'      ,  horiz_only,  'A', 'unitless', 'max flux cfl number (EDMF)' )
       call addfld ( 'edmf_cape'     ,  horiz_only,  'A', 'J/kg'    , 'ensemble mean CAPE (EDMF)' )
       call addfld ( 'edmf_upa'      , (/ 'ilev', 'nens' /), 'A', 'fraction', 'Plume updraft area fraction (EDMF)' )
@@ -1360,9 +1429,12 @@ end subroutine clubb_init_cnst
       call addfld ( 'edmf_dnthl'    , (/ 'ilev', 'nens' /), 'A', 'K'       , 'Plume downdraft liquid potential temperature (EDMF)' )
       call addfld ( 'edmf_dnqt'     , (/ 'ilev', 'nens' /), 'A', 'kg/kg'   , 'Plume downdraft total water mixing ratio (EDMF)' )
     end if 
-
-    call addfld ('QT_macmic'           , (/ 'ilev', 'ncyc' /), 'A', 'kg/kg'   , 'QT at macro/micro substep')
-    call addfld ('THETAL_macmic'       , (/ 'ilev', 'ncyc' /), 'A', 'K'       , 'THETAL at macro/micro substep')
+!+++ARH
+    call addfld ('qtm_macmic1'           , (/ 'ilev', 'ncyc' /), 'A', 'kg/kg'   , 'QT at macro/micro substep')
+    call addfld ('qtm_macmic2'           , (/ 'ilev', 'ncyc' /), 'A', 'kg/kg'   , 'QT at macro/micro substep')
+    call addfld ('thlm_macmic1'       , (/ 'ilev', 'ncyc' /), 'A', 'K'       , 'THETAL at macro/micro substep')
+    call addfld ('thlm_macmic2'       , (/ 'ilev', 'ncyc' /), 'A', 'K'       , 'THETAL at macro/micro substep')
+!---ARH
     call addfld ('RCM_CLUBB_macmic'    , (/ 'ilev', 'ncyc' /), 'A', 'kg/kg'   , 'RCM CLUBB at macro/micro substep')
     call addfld ('CLDFRAC_CLUBB_macmic', (/ 'ilev', 'ncyc' /), 'A', 'fraction', 'CLDFRAC CLUBB at macro/micro substep')
     call addfld ('WPTHLP_CLUBB_macmic' , (/ 'ilev', 'ncyc' /), 'A', 'W/m2'    , 'Heat Flux at macro/micro substep')
@@ -1372,6 +1444,36 @@ end subroutine clubb_init_cnst
       call addfld ( 'edmf_thlflx_macmic', (/ 'ilev', 'ncyc' /), 'A', 'K m/s'  , 'thl flux (EDMF) at macro/micro substep' )
       call addfld ( 'edmf_thvflx_macmic', (/ 'ilev', 'ncyc' /), 'A', 'K m/s'  , 'thv flux (EDMF) at macro/micro substep' )
       call addfld ( 'edmf_qtflx_macmic' , (/ 'ilev', 'ncyc' /), 'A', 'kg/kg m/s' , 'qt flux (EDMF) at macro/micro substep' )
+!+++ARH
+      call addfld ( 'up_macmic1', (/ 'ilev', 'nens', 'ncyc' /), 'I', 'm/s'  , 'up' )
+      call addfld ( 'up_macmic2', (/ 'ilev', 'nens', 'ncyc' /), 'I', 'm/s'  , 'up' )
+      call addfld ( 'dn_macmic1', (/ 'ilev', 'nens', 'ncyc' /), 'I', 'm/s'  , 'dn' )
+      call addfld ( 'dn_macmic2', (/ 'ilev', 'nens', 'ncyc' /), 'I', 'm/s'  , 'dn' )
+      call addfld ( 'thlu_macmic1', (/ 'ilev', 'nens', 'ncyc' /), 'I', 'm/s'  , 'thl up' )
+      call addfld ( 'thlu_macmic2', (/ 'ilev', 'nens', 'ncyc' /), 'I', 'm/s'  , 'thl up' )
+      call addfld ( 'qtu_macmic1', (/ 'ilev', 'nens', 'ncyc' /), 'I', 'm/s'  , 'qt up' )
+      call addfld ( 'qtu_macmic2', (/ 'ilev', 'nens', 'ncyc' /), 'I', 'm/s'  , 'qt up' )
+      call addfld ( 'thld_macmic1', (/ 'ilev', 'nens', 'ncyc' /), 'I', 'm/s'  , 'thl dn' )
+      call addfld ( 'thld_macmic2', (/ 'ilev', 'nens', 'ncyc' /), 'I', 'm/s'  , 'thl dn' )
+      call addfld ( 'qtd_macmic1', (/ 'ilev', 'nens', 'ncyc' /), 'I', 'm/s'  , 'qt dn' )
+      call addfld ( 'qtd_macmic2', (/ 'ilev', 'nens', 'ncyc' /), 'I', 'm/s'  , 'qt dn' )
+      call addfld ( 'dthl_macmic1', (/ 'ilev', 'ncyc' /), 'I', 'm/s'  , 'thl tend' )
+      call addfld ( 'dthl_macmic2', (/ 'ilev', 'ncyc' /), 'I', 'm/s'  , 'thl tend' )
+      call addfld ( 'dqt_macmic1', (/ 'ilev',  'ncyc' /), 'I', 'm/s'  , 'qt tend' )
+      call addfld ( 'dqt_macmic2', (/ 'ilev',  'ncyc' /), 'I', 'm/s'  , 'qt tend' )
+      call addfld ( 'dthlu_macmic1', (/ 'ilev', 'ncyc' /), 'I', 'm/s'  , 'thl up tend' )
+      call addfld ( 'dthlu_macmic2', (/ 'ilev', 'ncyc' /), 'I', 'm/s'  , 'thl up tend' )
+      call addfld ( 'dqtu_macmic1', (/ 'ilev',  'ncyc' /), 'I', 'm/s'  , 'qt up tend' )
+      call addfld ( 'dqtu_macmic2', (/ 'ilev',  'ncyc' /), 'I', 'm/s'  , 'qt up tend' )
+      call addfld ( 'dthld_macmic1', (/ 'ilev', 'ncyc' /), 'I', 'm/s'  , 'thl dn tend' )
+      call addfld ( 'dthld_macmic2', (/ 'ilev', 'ncyc' /), 'I', 'm/s'  , 'thl dn tend' )
+      call addfld ( 'dqtd_macmic1', (/ 'ilev',  'ncyc' /), 'I', 'm/s'  , 'qt dn tend' )
+      call addfld ( 'dqtd_macmic2', (/ 'ilev',  'ncyc' /), 'I', 'm/s'  , 'qt dn tend' )
+      call addfld ( 'ztop_macmic1', (/ 'ncyc' /), 'I', 'm/s'  , 'ztop' )
+      call addfld ( 'ztop_macmic2', (/ 'ncyc' /), 'I', 'm/s'  , 'ztop' )
+      call addfld ( 'ddcp_macmic1', (/ 'ncyc' /), 'I', 'm/s'  , 'ddcp' )
+      call addfld ( 'ddcp_macmic2', (/ 'ncyc' /), 'I', 'm/s'  , 'ddcp' )
+!---ARH
     end if
 
     !  Initialize statistics, below are dummy variables
@@ -1517,10 +1619,14 @@ end subroutine clubb_init_cnst
          call add_default( 'edmf_ddcp'     , 1, ' ')
          call add_default( 'edmf_L0'       , 1, ' ')
          call add_default( 'edmf_cape'     , 1, ' ')
-         call add_default( 'edmf_cfl'      , 1, ' ')
+         call add_default( 'edmf_cfl'     , 1, ' ')
        end if
-       call add_default( 'QT_macmic'           , 1, ' ')
-       call add_default( 'THETAL_macmic'       , 1, ' ')
+!+++ARH
+       !call add_default( 'qtm_macmic1'           , 1, ' ')
+       !call add_default( 'qtm_macmic2'           , 1, ' ')
+       !call add_default( 'thlm_macmic1'       , 1, ' ')
+       !call add_default( 'thlm_macmic2'       , 1, ' ')
+!---ARH
        call add_default( 'RCM_CLUBB_macmic'    , 1, ' ')
        call add_default( 'CLDFRAC_CLUBB_macmic', 1, ' ')
        call add_default( 'WPTHLP_CLUBB_macmic' , 1, ' ')
@@ -1530,6 +1636,36 @@ end subroutine clubb_init_cnst
          call add_default( 'edmf_thlflx_macmic' , 1, ' ')
          call add_default( 'edmf_qtflx_macmic'  , 1, ' ')
          call add_default( 'edmf_thvflx_macmic' , 1, ' ')
+!+++ARH
+         !call add_default( 'up_macmic1' , 1, ' ')
+         !call add_default( 'up_macmic2' , 1, ' ')
+         !call add_default( 'dn_macmic1' , 1, ' ')
+         !call add_default( 'dn_macmic2' , 1, ' ')
+         !call add_default( 'thlu_macmic1' , 1, ' ')
+         !call add_default( 'thlu_macmic2' , 1, ' ')
+         !call add_default( 'qtu_macmic1' , 1, ' ')
+         !call add_default( 'qtu_macmic2' , 1, ' ')
+         !call add_default( 'thld_macmic1' , 1, ' ')
+         !call add_default( 'thld_macmic2' , 1, ' ')
+         !call add_default( 'qtd_macmic1' , 1, ' ')
+         !call add_default( 'qtd_macmic2' , 1, ' ')
+         !call add_default( 'dthl_macmic1' , 1, ' ')
+         !call add_default( 'dthl_macmic2' , 1, ' ')
+         !call add_default( 'dqt_macmic1' , 1, ' ')
+         !call add_default( 'dqt_macmic2' , 1, ' ')
+         !call add_default( 'dthlu_macmic1' , 1, ' ')
+         !call add_default( 'dthlu_macmic2' , 1, ' ')
+         !call add_default( 'dqtu_macmic1' , 1, ' ')
+         !call add_default( 'dqtu_macmic2' , 1, ' ')
+         !call add_default( 'dthld_macmic1' , 1, ' ')
+         !call add_default( 'dthld_macmic2' , 1, ' ')
+         !call add_default( 'dqtd_macmic1' , 1, ' ')
+         !call add_default( 'dqtd_macmic2' , 1, ' ')
+         !call add_default( 'ztop_macmic1' , 1, ' ')
+         !call add_default( 'ztop_macmic2' , 1, ' ')
+         !call add_default( 'ddcp_macmic1' , 1, ' ')
+         !call add_default( 'ddcp_macmic2' , 1, ' ')
+!---ARH
        end if
     end if
 
@@ -1585,6 +1721,12 @@ end subroutine clubb_init_cnst
        call pbuf_set_field(pbuf2d, kvh_idx,     0.0_r8)
        call pbuf_set_field(pbuf2d, radf_idx,    0.0_r8)
 
+!+++ARH
+       call pbuf_set_field(pbuf2d, thlm_macmic1_idx, 0.0_r8)
+       call pbuf_set_field(pbuf2d, thlm_macmic2_idx, 0.0_r8)
+       call pbuf_set_field(pbuf2d, qtm_macmic1_idx, 0.0_r8)
+       call pbuf_set_field(pbuf2d, qtm_macmic2_idx, 0.0_r8)
+!---ARH
        ! Initialize SILHS covariance contributions
        call pbuf_set_field(pbuf2d, rtp2_mc_zt_idx,    0.0_r8)
        call pbuf_set_field(pbuf2d, thlp2_mc_zt_idx,   0.0_r8)
@@ -1599,6 +1741,36 @@ end subroutine clubb_init_cnst
          call pbuf_set_field(pbuf2d, ddcp_idx, 0.0_r8)
          call pbuf_set_field(pbuf2d, ddcp_macmic_idx, 0.0_r8)
          call pbuf_set_field(pbuf2d, ddcpmn_idx, 0.0_r8)
+!+++ARH
+         call pbuf_set_field(pbuf2d, up_macmic1_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, up_macmic2_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, dn_macmic1_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, dn_macmic2_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, thlu_macmic1_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, thlu_macmic2_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, qtu_macmic1_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, qtu_macmic2_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, thld_macmic1_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, thld_macmic2_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, qtd_macmic1_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, qtd_macmic2_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, dthl_macmic1_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, dthl_macmic2_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, dqt_macmic1_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, dqt_macmic2_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, dthlu_macmic1_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, dthlu_macmic2_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, dqtu_macmic1_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, dqtu_macmic2_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, dthld_macmic1_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, dthld_macmic2_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, dqtd_macmic1_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, dqtd_macmic2_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, ztop_macmic1_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, ztop_macmic2_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, ddcp_macmic1_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, ddcp_macmic2_idx, 0.0_r8)
+!---ARH
        end if
 
     endif
@@ -1996,8 +2168,12 @@ end subroutine clubb_init_cnst
    real(r8), pointer :: ddcp_macmic(:)
    real(r8), pointer :: ddcpmn(:,:)
 
-   real(r8), pointer :: qt_macmic(:,:)
-   real(r8), pointer :: thl_macmic(:,:)
+!+++ARH
+   real(r8), pointer :: qtm_macmic1(:,:)
+   real(r8), pointer :: qtm_macmic2(:,:)
+   real(r8), pointer :: thlm_macmic1(:,:)
+   real(r8), pointer :: thlm_macmic2(:,:)
+!---ARH
    real(r8), pointer :: rcm_macmic(:,:)
    real(r8), pointer :: cldfrac_macmic(:,:)
    real(r8), pointer :: wpthlp_macmic(:,:)
@@ -2006,6 +2182,36 @@ end subroutine clubb_init_cnst
    real(r8), pointer :: mf_thlflx_macmic(:,:)
    real(r8), pointer :: mf_qtflx_macmic(:,:)
    real(r8), pointer :: mf_thvflx_macmic(:,:)
+!+++ARH
+   real(r8), pointer :: up_macmic1(:,:)
+   real(r8), pointer :: up_macmic2(:,:)
+   real(r8), pointer :: dn_macmic1(:,:)
+   real(r8), pointer :: dn_macmic2(:,:)
+   real(r8), pointer :: thlu_macmic1(:,:)
+   real(r8), pointer :: thlu_macmic2(:,:)
+   real(r8), pointer :: qtu_macmic1(:,:)
+   real(r8), pointer :: qtu_macmic2(:,:)
+   real(r8), pointer :: thld_macmic1(:,:)
+   real(r8), pointer :: thld_macmic2(:,:)
+   real(r8), pointer :: qtd_macmic1(:,:)
+   real(r8), pointer :: qtd_macmic2(:,:)
+   real(r8), pointer :: dthl_macmic1(:,:)
+   real(r8), pointer :: dthl_macmic2(:,:)
+   real(r8), pointer :: dqt_macmic1(:,:)
+   real(r8), pointer :: dqt_macmic2(:,:)
+   real(r8), pointer :: dthlu_macmic1(:,:)
+   real(r8), pointer :: dthlu_macmic2(:,:)
+   real(r8), pointer :: dqtu_macmic1(:,:)
+   real(r8), pointer :: dqtu_macmic2(:,:)
+   real(r8), pointer :: dthld_macmic1(:,:)
+   real(r8), pointer :: dthld_macmic2(:,:)
+   real(r8), pointer :: dqtd_macmic1(:,:)
+   real(r8), pointer :: dqtd_macmic2(:,:)
+   real(r8), pointer :: ztop_macmic1(:,:)
+   real(r8), pointer :: ztop_macmic2(:,:)
+   real(r8), pointer :: ddcp_macmic1(:,:)
+   real(r8), pointer :: ddcp_macmic2(:,:)
+!---ARH
 
    real(r8)                          :: stend(pcols,pver)
    real(r8)                          :: qvtend(pcols,pver)
@@ -2139,6 +2345,9 @@ end subroutine clubb_init_cnst
                                               mf_updet,                &
                                               mf_upent
 
+   real(r8), dimension(pverp,clubb_mf_nup) :: flip
+   real(r8), dimension(pverp) :: lilflip
+
    ! CFL limiter vars
    real(r8), parameter                  :: cflval = 1._r8
    real(r8)                             :: cflfac,     max_cfl,        &
@@ -2170,7 +2379,7 @@ end subroutine clubb_init_cnst
                                            dzm,        invrs_exner_zm   ! momentum grid
 
    real(r8) :: temp2d(pcols,pver), temp2dp(pcols,pverp)  ! temporary array for holding scaled outputs
-
+   real(r8) :: valmax
 
    integer :: nlev
 
@@ -2313,8 +2522,12 @@ end subroutine clubb_init_cnst
    call pbuf_get_field(pbuf, wpthlp_mc_zt_idx,  wpthlp_mc_zt)
    call pbuf_get_field(pbuf, rtpthlp_mc_zt_idx, rtpthlp_mc_zt)
 
-   call pbuf_get_field(pbuf, qt_macmic_idx, qt_macmic)
-   call pbuf_get_field(pbuf, thl_macmic_idx, thl_macmic)
+!+++ARH
+   call pbuf_get_field(pbuf, qtm_macmic1_idx, qtm_macmic1)
+   call pbuf_get_field(pbuf, qtm_macmic2_idx, qtm_macmic2)
+   call pbuf_get_field(pbuf, thlm_macmic1_idx, thlm_macmic1)
+   call pbuf_get_field(pbuf, thlm_macmic2_idx, thlm_macmic2)
+!---ARH
    call pbuf_get_field(pbuf, rcm_macmic_idx, rcm_macmic)
    call pbuf_get_field(pbuf, cldfrac_macmic_idx, cldfrac_macmic)
    call pbuf_get_field(pbuf, wpthlp_macmic_idx, wpthlp_macmic)
@@ -2333,6 +2546,36 @@ end subroutine clubb_init_cnst
      call pbuf_get_field(pbuf, ddcp_idx, ddcp)
      call pbuf_get_field(pbuf, ddcp_macmic_idx, ddcp_macmic)
      call pbuf_get_field(pbuf, ddcpmn_idx, ddcpmn)
+!+++ARH
+     call pbuf_get_field(pbuf, up_macmic1_idx, up_macmic1)
+     call pbuf_get_field(pbuf, up_macmic2_idx, up_macmic2)
+     call pbuf_get_field(pbuf, dn_macmic1_idx, dn_macmic1)
+     call pbuf_get_field(pbuf, dn_macmic2_idx, dn_macmic2)
+     call pbuf_get_field(pbuf, thlu_macmic1_idx, thlu_macmic1)
+     call pbuf_get_field(pbuf, thlu_macmic2_idx, thlu_macmic2)
+     call pbuf_get_field(pbuf, qtu_macmic1_idx, qtu_macmic1)
+     call pbuf_get_field(pbuf, qtu_macmic2_idx, qtu_macmic2)
+     call pbuf_get_field(pbuf, thld_macmic1_idx, thld_macmic1)
+     call pbuf_get_field(pbuf, thld_macmic2_idx, thld_macmic2)
+     call pbuf_get_field(pbuf, qtd_macmic1_idx, qtd_macmic1)
+     call pbuf_get_field(pbuf, qtd_macmic2_idx, qtd_macmic2)
+     call pbuf_get_field(pbuf, dthl_macmic1_idx, dthl_macmic1)
+     call pbuf_get_field(pbuf, dthl_macmic2_idx, dthl_macmic2)
+     call pbuf_get_field(pbuf, dqt_macmic1_idx, dqt_macmic1)
+     call pbuf_get_field(pbuf, dqt_macmic2_idx, dqt_macmic2)
+     call pbuf_get_field(pbuf, dthlu_macmic1_idx, dthlu_macmic1)
+     call pbuf_get_field(pbuf, dthlu_macmic2_idx, dthlu_macmic2)
+     call pbuf_get_field(pbuf, dqtu_macmic1_idx, dqtu_macmic1)
+     call pbuf_get_field(pbuf, dqtu_macmic2_idx, dqtu_macmic2)
+     call pbuf_get_field(pbuf, dthld_macmic1_idx, dthld_macmic1)
+     call pbuf_get_field(pbuf, dthld_macmic2_idx, dthld_macmic2)
+     call pbuf_get_field(pbuf, dqtd_macmic1_idx, dqtd_macmic1)
+     call pbuf_get_field(pbuf, dqtd_macmic2_idx, dqtd_macmic2)
+     call pbuf_get_field(pbuf, ztop_macmic1_idx, ztop_macmic1)
+     call pbuf_get_field(pbuf, ztop_macmic2_idx, ztop_macmic2)
+     call pbuf_get_field(pbuf, ddcp_macmic1_idx, ddcp_macmic1)
+     call pbuf_get_field(pbuf, ddcp_macmic2_idx, ddcp_macmic2)
+!---ARH
 
      ! SVP
      do k = 1, pver
@@ -2914,6 +3157,8 @@ end subroutine clubb_init_cnst
 
         th_sfc = cam_in%ts(i)*invrs_exner_zm(1)
 
+        call calc_ustar( state1%t(i,pver), state1%pmid(i,pver), cam_in%wsx(i), cam_in%wsy(i), &
+                         rrho(i), ustar )
       end if
      
       if (clubb_do_adv) then
@@ -2962,6 +3207,13 @@ end subroutine clubb_init_cnst
       stats_nsamp = nint(stats_tsamp/dtime)
       stats_nout = nint(stats_tout/dtime)
 
+!+++ARH
+      if (macmic_it==1) thlm_macmic1(i,:) = 0._r8
+      if (macmic_it==1) thlm_macmic2(i,:) = 0._r8
+      if (macmic_it==1) qtm_macmic1(i,:) = 0._r8
+      if (macmic_it==1) qtm_macmic2(i,:) = 0._r8
+!---ARH
+
       if (do_clubb_mf) then
         mf_L0          = 0._r8
         mf_L0_nadv     = 0._r8
@@ -2973,6 +3225,37 @@ end subroutine clubb_init_cnst
 
         if (macmic_it==1) ztopm1_macmic(i) = 0._r8
         if (macmic_it==1) ddcp_macmic(i) = 0._r8
+
+!+++ARH
+        if (macmic_it==1) up_macmic1(i,:) = 0._r8
+        if (macmic_it==1) up_macmic2(i,:) = 0._r8
+        if (macmic_it==1) dn_macmic1(i,:) = 0._r8
+        if (macmic_it==1) dn_macmic2(i,:) = 0._r8
+        if (macmic_it==1) thlu_macmic1(i,:) = 0._r8
+        if (macmic_it==1) thlu_macmic2(i,:) = 0._r8
+        if (macmic_it==1) qtu_macmic1(i,:) = 0._r8
+        if (macmic_it==1) qtu_macmic2(i,:) = 0._r8
+        if (macmic_it==1) thld_macmic1(i,:) = 0._r8
+        if (macmic_it==1) thld_macmic2(i,:) = 0._r8
+        if (macmic_it==1) qtd_macmic1(i,:) = 0._r8
+        if (macmic_it==1) qtd_macmic2(i,:) = 0._r8
+        if (macmic_it==1) dthl_macmic1(i,:) = 0._r8
+        if (macmic_it==1) dthl_macmic2(i,:) = 0._r8
+        if (macmic_it==1) dqt_macmic1(i,:) = 0._r8
+        if (macmic_it==1) dqt_macmic2(i,:) = 0._r8
+        if (macmic_it==1) dthlu_macmic1(i,:) = 0._r8
+        if (macmic_it==1) dthlu_macmic2(i,:) = 0._r8
+        if (macmic_it==1) dqtu_macmic1(i,:) = 0._r8
+        if (macmic_it==1) dqtu_macmic2(i,:) = 0._r8
+        if (macmic_it==1) dthld_macmic1(i,:) = 0._r8
+        if (macmic_it==1) dthld_macmic2(i,:) = 0._r8
+        if (macmic_it==1) dqtd_macmic1(i,:) = 0._r8
+        if (macmic_it==1) dqtd_macmic2(i,:) = 0._r8
+        if (macmic_it==1) ztop_macmic1(i,:) = 0._r8
+        if (macmic_it==1) ztop_macmic2(i,:) = 0._r8
+        if (macmic_it==1) ddcp_macmic1(i,:) = 0._r8
+        if (macmic_it==1) ddcp_macmic2(i,:) = 0._r8
+!---ARH
 
 !+++ARH - Temporary hack - pbuf_set_field is apparently not taking?
         if (is_first_step() .and. macmic_it==1) then
@@ -3050,7 +3333,8 @@ end subroutine clubb_init_cnst
                                                       th_zt,      qv_zt,      qc_zt,          & ! input
                                                       thlm_zm_in, rtm_zm_in,  thv_ds_zm,      & ! input
                                                       th_zm,      qv_zm,      qc_zm,          & ! input
-                                         th_sfc,      wpthlp_sfc, wprtp_sfc,  pblh(i),        & ! input
+                              ustar,     th_sfc,      wpthlp_sfc, wprtp_sfc,  pblh(i),        & ! input
+
                               ! +++ MDF 
                               size(cam_in%lnd_areaPatch(i,:)), cam_in%landfrac(i),            & ! input
                               cam_in%lnd_areaPatch(i,:),                                      & ! input
@@ -3186,7 +3470,205 @@ end subroutine clubb_init_cnst
            mf_ent_nadv(:pverp)     = mf_ent_nadv(:pverp) + s_awu(:pverp)
            
            max_cfl_nadv = MAX(max_cfl,max_cfl_nadv)
+!+++ARH
+         if (t==1) then
+
+           ztop_macmic1(i,macmic_it) = mf_ztopm1
+           ddcp_macmic1(i,macmic_it) = mf_ddcp
+
+           do k=1,nlev+1
+             flip(pverp-k+1,:clubb_mf_nup) = mf_upw(k,:clubb_mf_nup)
+           end do
+           
+           do k=1,clubb_mf_nup
+             up_macmic1( i, 1+pverp*(clubb_mf_nup*(macmic_it-1)+k-1):pverp*(clubb_mf_nup*(macmic_it-1)+k) ) = flip(:pverp,k)
+           end do
+
+           do k=1,nlev+1
+             flip(pverp-k+1,:clubb_mf_nup) = mf_dnw(k,:clubb_mf_nup)
+           end do
+
+           do k=1,clubb_mf_nup
+             dn_macmic1( i, 1+pverp*(clubb_mf_nup*(macmic_it-1)+k-1):pverp*(clubb_mf_nup*(macmic_it-1)+k) ) = flip(:pverp,k)
+           end do
+
+           do k=1,nlev+1
+             flip(pverp-k+1,:clubb_mf_nup) = mf_upthl(k,:clubb_mf_nup)
+           end do
+
+           do k=1,clubb_mf_nup
+             thlu_macmic1( i, 1+pverp*(clubb_mf_nup*(macmic_it-1)+k-1):pverp*(clubb_mf_nup*(macmic_it-1)+k) ) = flip(:pverp,k)
+           end do
+
+           do k=1,nlev+1
+             flip(pverp-k+1,:clubb_mf_nup) = mf_upqt(k,:clubb_mf_nup)
+           end do
+
+           do k=1,clubb_mf_nup
+             qtu_macmic1( i, 1+pverp*(clubb_mf_nup*(macmic_it-1)+k-1):pverp*(clubb_mf_nup*(macmic_it-1)+k) ) = flip(:pverp,k)
+           end do
+
+           do k=1,nlev+1
+             flip(pverp-k+1,:clubb_mf_nup) = mf_dnthl(k,:clubb_mf_nup)
+           end do
+
+           do k=1,clubb_mf_nup
+             thld_macmic1( i, 1+pverp*(clubb_mf_nup*(macmic_it-1)+k-1):pverp*(clubb_mf_nup*(macmic_it-1)+k) ) = flip(:pverp,k)
+           end do
+
+           do k=1,nlev+1
+             flip(pverp-k+1,:clubb_mf_nup) = mf_dnqt(k,:clubb_mf_nup)
+           end do
+
+           do k=1,clubb_mf_nup
+             qtd_macmic1( i, 1+pverp*(clubb_mf_nup*(macmic_it-1)+k-1):pverp*(clubb_mf_nup*(macmic_it-1)+k) ) = flip(:pverp,k)
+           end do
+
+           do k=1,nlev+1
+             lilflip(pverp-k+1) = thlm_forcing(k)
+           end do
+           dthl_macmic1(i,pverp*(macmic_it-1)+1:pverp*macmic_it) = lilflip(:pverp)
+
+           do k=1,nlev+1
+             lilflip(pverp-k+1) = rtm_forcing(k)
+           end do
+           dqt_macmic1(i,pverp*(macmic_it-1)+1:pverp*macmic_it) = lilflip(:pverp)
+
+           do k=1,nlev+1
+             lilflip(pverp-k+1) = mf_thlforcup(k)
+           end do
+           dthlu_macmic1(i,pverp*(macmic_it-1)+1:pverp*macmic_it) = lilflip(:pverp)
+
+           do k=1,nlev+1
+             lilflip(pverp-k+1) = mf_qtforcup(k)
+           end do
+           dqtu_macmic1(i,pverp*(macmic_it-1)+1:pverp*macmic_it) = lilflip(:pverp)
+
+           do k=1,nlev+1
+             lilflip(pverp-k+1) = mf_thlforcdn(k)
+           end do
+           dthld_macmic1(i,pverp*(macmic_it-1)+1:pverp*macmic_it) = lilflip(:pverp)
+
+           do k=1,nlev+1
+             lilflip(pverp-k+1) = mf_qtforcdn(k)
+           end do
+           dqtd_macmic1(i,pverp*(macmic_it-1)+1:pverp*macmic_it) = lilflip(:pverp)
+
+         else if (t==2) then
+
+           ztop_macmic2(i,macmic_it) = mf_ztopm1
+           ddcp_macmic2(i,macmic_it) = mf_ddcp
+
+           do k=1,nlev+1
+             flip(pverp-k+1,:clubb_mf_nup) = mf_upw(k,:clubb_mf_nup)
+           end do
+
+           do k=1,clubb_mf_nup
+             up_macmic2( i, 1+pverp*(clubb_mf_nup*(macmic_it-1)+k-1):pverp*(clubb_mf_nup*(macmic_it-1)+k) ) = flip(:pverp,k)
+           end do
+
+           do k=1,nlev+1
+             flip(pverp-k+1,:clubb_mf_nup) = mf_dnw(k,:clubb_mf_nup)
+           end do
+
+           do k=1,clubb_mf_nup
+             dn_macmic2( i, 1+pverp*(clubb_mf_nup*(macmic_it-1)+k-1):pverp*(clubb_mf_nup*(macmic_it-1)+k) ) = flip(:pverp,k)
+           end do
+
+           do k=1,nlev+1
+             flip(pverp-k+1,:clubb_mf_nup) = mf_upthl(k,:clubb_mf_nup)
+           end do
+
+           do k=1,clubb_mf_nup
+             thlu_macmic2( i, 1+pverp*(clubb_mf_nup*(macmic_it-1)+k-1):pverp*(clubb_mf_nup*(macmic_it-1)+k) ) = flip(:pverp,k)
+           end do
+
+           do k=1,nlev+1
+             flip(pverp-k+1,:clubb_mf_nup) = mf_upqt(k,:clubb_mf_nup)
+           end do
+
+           do k=1,clubb_mf_nup
+             qtu_macmic2( i, 1+pverp*(clubb_mf_nup*(macmic_it-1)+k-1):pverp*(clubb_mf_nup*(macmic_it-1)+k) ) = flip(:pverp,k)
+           end do
+
+           do k=1,nlev+1
+             flip(pverp-k+1,:clubb_mf_nup) = mf_dnthl(k,:clubb_mf_nup)
+           end do
+
+           do k=1,clubb_mf_nup
+             thld_macmic2( i, 1+pverp*(clubb_mf_nup*(macmic_it-1)+k-1):pverp*(clubb_mf_nup*(macmic_it-1)+k) ) = flip(:pverp,k)
+           end do
+
+           do k=1,nlev+1
+             flip(pverp-k+1,:clubb_mf_nup) = mf_dnqt(k,:clubb_mf_nup)
+           end do
+
+           do k=1,clubb_mf_nup
+             qtd_macmic2( i, 1+pverp*(clubb_mf_nup*(macmic_it-1)+k-1):pverp*(clubb_mf_nup*(macmic_it-1)+k) ) = flip(:pverp,k)
+           end do
+
+           do k=1,nlev+1
+             lilflip(pverp-k+1) = thlm_forcing(k)
+           end do
+           dthl_macmic2(i,pverp*(macmic_it-1)+1:pverp*macmic_it) = lilflip(:pverp)
+
+           do k=1,nlev+1
+             lilflip(pverp-k+1) = rtm_forcing(k)
+           end do
+           dqt_macmic2(i,pverp*(macmic_it-1)+1:pverp*macmic_it) = lilflip(:pverp)
+
+           do k=1,nlev+1
+             lilflip(pverp-k+1) = mf_thlforcup(k)
+           end do
+           dthlu_macmic2(i,pverp*(macmic_it-1)+1:pverp*macmic_it) = lilflip(:pverp)
+
+           do k=1,nlev+1
+             lilflip(pverp-k+1) = mf_qtforcup(k)
+           end do
+           dqtu_macmic2(i,pverp*(macmic_it-1)+1:pverp*macmic_it) = lilflip(:pverp)
+
+           do k=1,nlev+1
+             lilflip(pverp-k+1) = mf_thlforcdn(k)
+           end do
+           dthld_macmic2(i,pverp*(macmic_it-1)+1:pverp*macmic_it) = lilflip(:pverp)
+
+           do k=1,nlev+1
+             lilflip(pverp-k+1) = mf_qtforcdn(k)
+           end do
+           dqtd_macmic2(i,pverp*(macmic_it-1)+1:pverp*macmic_it) = lilflip(:pverp)
+
+         end if 
+!---ARH
+
+         end if !clubbmf
+
+!+++ARH
+         if (t==1) then
+
+           do k=1,nlev+1
+             lilflip(pverp-k+1) = thlm_in(k)
+           end do
+           thlm_macmic1(i,pverp*(macmic_it-1)+1:pverp*macmic_it) = lilflip(:pverp)
+
+           do k=1,nlev+1
+             lilflip(pverp-k+1) = rtm_in(k)
+           end do
+           qtm_macmic1(i,pverp*(macmic_it-1)+1:pverp*macmic_it) = lilflip(:pverp)
+
+         else if (t==2) then
+
+           do k=1,nlev+1
+             lilflip(pverp-k+1) = thlm_in(k)
+           end do
+           thlm_macmic2(i,pverp*(macmic_it-1)+1:pverp*macmic_it) = lilflip(:pverp)
+
+           do k=1,nlev+1
+             lilflip(pverp-k+1) = rtm_in(k)
+           end do
+           qtm_macmic2(i,pverp*(macmic_it-1)+1:pverp*macmic_it) = lilflip(:pverp)
+
          end if
+!---ARH
 
          !  Advance CLUBB CORE one timestep in the future
          call advance_clubb_core_api &
@@ -3225,6 +3707,11 @@ end subroutine clubb_init_cnst
             call endrun(subr//':  Fatal error in CLUBB library')
          end if
 
+!+++ARH  ! clip negative water
+         do k=1,pverp 
+           if (rtm_in(k) < rcm_inout(k)) rtm_in(k) = rcm_inout(k)
+         end do
+!---ARH
 
          if (do_rainturb) then
             rvm_in = rtm_in - rcm_inout 
@@ -3257,12 +3744,6 @@ end subroutine clubb_init_cnst
           !  output arrays to make them conformable to CAM output
           if (l_stats) call stats_end_timestep_clubb(i,out_zt,out_zm,&
                                                      out_radzt,out_radzm,out_sfc)
-
-
-          !  Hard clipping of rtm. Note this will violate mass/energy conservation
-          do k=1,pverp 
-            if (rtm_in(k) < rcm_inout(k)) rtm_in(k) = rcm_inout(k)
-          end do
 
       enddo  ! end time loop
 
@@ -4019,22 +4500,16 @@ end subroutine clubb_init_cnst
       enddo
    enddo
    
-   do k=1,pverp
-      do i=1,ncol
-        qt_macmic(:ncol,pverp*(macmic_it-1)+1:pverp*macmic_it) = rtm(:ncol,:pverp)
-        thl_macmic(:ncol,pverp*(macmic_it-1)+1:pverp*macmic_it) = thlm(:ncol,:pverp)
-        rcm_macmic(:ncol,pverp*(macmic_it-1)+1:pverp*macmic_it) = rcm(:ncol,:pverp)
-        cldfrac_macmic(:ncol,pverp*(macmic_it-1)+1:pverp*macmic_it) = cloud_frac(:ncol,:pverp)
-        wpthlp_macmic(:ncol,pverp*(macmic_it-1)+1:pverp*macmic_it) = wpthlp_output(:ncol,:pverp)
-        wprtp_macmic(:ncol,pverp*(macmic_it-1)+1:pverp*macmic_it) = wprtp_output(:ncol,:pverp)
-        wpthvp_macmic(:ncol,pverp*(macmic_it-1)+1:pverp*macmic_it) = wpthvp(:ncol,:pverp)
-        if (do_clubb_mf) then
-          mf_thlflx_macmic(:ncol,pverp*(macmic_it-1)+1:pverp*macmic_it) = mf_thlflx_output(:ncol,:pverp)
-          mf_qtflx_macmic(:ncol,pverp*(macmic_it-1)+1:pverp*macmic_it) = mf_qtflx_output(:ncol,:pverp)
-          mf_thvflx_macmic(:ncol,pverp*(macmic_it-1)+1:pverp*macmic_it) = mf_thvflx_output(:ncol,:pverp)
-        end if
-      enddo
-   enddo
+   rcm_macmic(:ncol,pverp*(macmic_it-1)+1:pverp*macmic_it) = rcm(:ncol,:pverp)
+   cldfrac_macmic(:ncol,pverp*(macmic_it-1)+1:pverp*macmic_it) = cloud_frac(:ncol,:pverp)
+   wpthlp_macmic(:ncol,pverp*(macmic_it-1)+1:pverp*macmic_it) = wpthlp_output(:ncol,:pverp)
+   wprtp_macmic(:ncol,pverp*(macmic_it-1)+1:pverp*macmic_it) = wprtp_output(:ncol,:pverp)
+   wpthvp_macmic(:ncol,pverp*(macmic_it-1)+1:pverp*macmic_it) = wpthvp(:ncol,:pverp)
+   if (do_clubb_mf) then
+     mf_thlflx_macmic(:ncol,pverp*(macmic_it-1)+1:pverp*macmic_it) = mf_thlflx_output(:ncol,:pverp)
+     mf_qtflx_macmic(:ncol,pverp*(macmic_it-1)+1:pverp*macmic_it) = mf_qtflx_output(:ncol,:pverp)
+     mf_thvflx_macmic(:ncol,pverp*(macmic_it-1)+1:pverp*macmic_it) = mf_thvflx_output(:ncol,:pverp)
+   end if
 
    ! --------------------------------------------------------------------------------- ! 
    !  Diagnose some quantities that are computed in macrop_tend here.                  !
@@ -4337,7 +4812,10 @@ end subroutine clubb_init_cnst
      call outfld( 'edmf_sqtup'    , mf_sqtup_output,           pcols, lchnk )
      call outfld( 'edmf_sqtdn'    , mf_sqtdn_output,           pcols, lchnk )
      call outfld( 'edmf_ztop'     , mf_ztop_output,            pcols, lchnk )
-     call outfld( 'edmf_ddcp'     , mf_ddcp_output,            pcols, lchnk )
+!+++ARH
+     ! macmic_it==1 ensures that this is ddcp aeraged over the prior time-steps
+     if (macmic_it==1) call outfld( 'edmf_ddcp'     , mf_ddcp_output,            pcols, lchnk )
+!---ARH
      call outfld( 'edmf_L0'       , mf_L0_output,              pcols, lchnk )
      call outfld( 'edmf_cape'     , mf_cape_output,            pcols, lchnk )
      call outfld( 'edmf_cfl'      , mf_cfl_output,             pcols, lchnk )
@@ -4345,8 +4823,12 @@ end subroutine clubb_init_cnst
    end if
 
    if (macmic_it==cld_macmic_num_steps) then
-     call outfld( 'QT_macmic'            , qt_macmic,            pcols, lchnk )
-     call outfld( 'THETAL_macmic'        , thl_macmic,           pcols, lchnk )
+!+++ARH
+     call outfld( 'qtm_macmic1'         , qtm_macmic1,            pcols, lchnk )
+     call outfld( 'qtm_macmic2'         , qtm_macmic2,            pcols, lchnk )
+     call outfld( 'thlm_macmic1'        , thlm_macmic1,           pcols, lchnk )
+     call outfld( 'thlm_macmic2'        , thlm_macmic2,           pcols, lchnk )
+!---ARH
      call outfld( 'RCM_CLUBB_macmic'     , rcm_macmic,           pcols, lchnk )
      call outfld( 'CLDFRAC_CLUBB_macmic' , cldfrac_macmic,       pcols, lchnk )
 
@@ -4357,6 +4839,36 @@ end subroutine clubb_init_cnst
        call outfld( 'edmf_thlflx_macmic'   , mf_thlflx_macmic,     pcols, lchnk )
        call outfld( 'edmf_qtflx_macmic'    , mf_qtflx_macmic,      pcols, lchnk )
        call outfld( 'edmf_thvflx_macmic'   , mf_thvflx_macmic,     pcols, lchnk )
+!+++ARH
+       call outfld( 'up_macmic1'   , up_macmic1,     pcols, lchnk )
+       call outfld( 'up_macmic2'   , up_macmic2,     pcols, lchnk )
+       call outfld( 'dn_macmic1'   , dn_macmic1,     pcols, lchnk )
+       call outfld( 'dn_macmic2'   , dn_macmic2,     pcols, lchnk )
+       call outfld( 'thlu_macmic1' , thlu_macmic1,   pcols, lchnk )
+       call outfld( 'thlu_macmic2' , thlu_macmic2,   pcols, lchnk )
+       call outfld( 'qtu_macmic1'  , qtu_macmic1,    pcols, lchnk )
+       call outfld( 'qtu_macmic2'  , qtu_macmic2,    pcols, lchnk )
+       call outfld( 'thld_macmic1' , thld_macmic1,   pcols, lchnk )
+       call outfld( 'thld_macmic2' , thld_macmic2,   pcols, lchnk )
+       call outfld( 'qtd_macmic1'  , qtd_macmic1,    pcols, lchnk )
+       call outfld( 'qtd_macmic2'  , qtd_macmic2,    pcols, lchnk )
+       call outfld( 'dthl_macmic1' , dthl_macmic1,   pcols, lchnk )
+       call outfld( 'dthl_macmic2' , dthl_macmic2,   pcols, lchnk )
+       call outfld( 'dqt_macmic1'  , dqt_macmic1,    pcols, lchnk )
+       call outfld( 'dqt_macmic2'  , dqt_macmic2,    pcols, lchnk )
+       call outfld( 'dthlu_macmic1' , dthlu_macmic1,   pcols, lchnk )
+       call outfld( 'dthlu_macmic2' , dthlu_macmic2,   pcols, lchnk )
+       call outfld( 'dqtu_macmic1'  , dqtu_macmic1,    pcols, lchnk )
+       call outfld( 'dqtu_macmic2'  , dqtu_macmic2,    pcols, lchnk )
+       call outfld( 'dthld_macmic1' , dthld_macmic1,   pcols, lchnk )
+       call outfld( 'dthld_macmic2' , dthld_macmic2,   pcols, lchnk )
+       call outfld( 'dqtd_macmic1'  , dqtd_macmic1,    pcols, lchnk )
+       call outfld( 'dqtd_macmic2'  , dqtd_macmic2,    pcols, lchnk )
+       call outfld( 'ztop_macmic1'  , ztop_macmic1,    pcols, lchnk )
+       call outfld( 'ztop_macmic2'  , ztop_macmic2,    pcols, lchnk )
+       call outfld( 'ddcp_macmic1'  , ddcp_macmic1,    pcols, lchnk )
+       call outfld( 'ddcp_macmic2'  , ddcp_macmic2,    pcols, lchnk )
+!---ARH
      end if
    end if
 
