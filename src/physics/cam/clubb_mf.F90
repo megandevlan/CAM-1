@@ -409,8 +409,9 @@ module clubb_mf
                                                ee2,     ud2
      ! +++ MDF
      ! surface patch variables 
-     integer                                :: p, patchPlumes, patchPlumesTotal 
-     real(r8)                               :: wthvPatch
+     integer                                :: p, patchPlumes, patchPlumesTotal, pNorm 
+     !real(r8)                               :: wthvPatch
+     logical                                :: letsDoMF = .false.
      ! --- MDF 
 
      !
@@ -591,132 +592,143 @@ module clubb_mf
      zcb_unset = 9999999._r8
      zcb       = zcb_unset
 
-     ! surface buoyancy flux
-     wthv = wthl+zvir*ths*wqt
 
-     ! if surface buoyancy is positive then do mass-flux
-     if ( wthv > 0._r8 ) then
+! +++ MDF: Big hammer of code mods
+    if (do_clubb_mf_patchInit .and. landfracFromSfc==1.0_r8 .and. (.not. is_first_step())) then
 
-       ! --------------------------------------------------------- !
-       ! Initialize using Deardorff convective velocity scale      ! 
-       ! --------------------------------------------------------- !
-       convh = max(pblh,pblhmin)
-       wstar = max( wstarmin, (gravit/thv(1)*wthv*convh)**(1._r8/3._r8) )
+       ! Loop over surface patches
+       do p=1,npft
+          write(iulog,*)'MDF (debug): patch area ',patchArea(p)
 
-       ! --------------------------------------------------------- !
-       ! Compute cold pool feedback parameter                      ! 
-       ! --------------------------------------------------------- !
-       cpfac = 1._r8
-       if (do_clubb_mf_coldpool) cpfac = min( (max(ddcp/wstar,1._r8))**clubb_mf_ddbeta, max_cpfac ) 
+          wthv = patchSH(p)+zvir*patchTHS(p)*patchLH(p)
+          write(iulog,*)'MDF (debug): Value of wthv_patch = ',wthv
+
+          ! if surface buoyancy is positive & patch exists, then do mass-flux
+          if ( wthv > 0._r8 .and. patchArea(p) > 0 .and. patchArea(p)<=1 ) then
+             write(iulog,*)'MDF (debug): You are within first loop (line 583)'
+             letsDoMF = .true.
+
+            ! --------------------------------------------------------- !
+            ! Initialize using Deardorff convective velocity scale      ! 
+            ! --------------------------------------------------------- !
+
+            convh = max(pblh,pblhmin)
+            wstar = max( wstarmin, (gravit/thv(1)*wthv*convh)**(1._r8/3._r8) )
+            ! TODO: update thv(1) to use patch-specific thv; would patchTHS
+            ! suffice? 
+             write(iulog,*)'MDF (debug): wstar = ',wstar
+             write(iulog,*)'MDF (debug): convh = ',convh
+             write(iulog,*)'MDF (debug): thv(1) = ',thv(1)
+             write(iulog,*)'MDF (debug): patchTHS(p) = ',patchTHS(p)
+
+            ! --------------------------------------------------------- !
+            ! Compute cold pool feedback parameter                      ! 
+            ! --------------------------------------------------------- !
+            cpfac = 1._r8
+            if (do_clubb_mf_coldpool) cpfac = min( (max(ddcp/wstar,1._r8))**clubb_mf_ddbeta, max_cpfac ) 
+
+            ! --------------------------------------------------------- !
+            ! Construct tri-variate PDF at the surface from wstar       ! 
+            ! and initialize plume thv, qt, w                           !
+            ! --------------------------------------------------------- !
+
+            ! Number of plumes to initiate on this particular patch
+            patchPlumes = nint(clubb_mf_nup * patchArea(p))
+            write(iulog,*)'MDF: patchPlumes = ',patchPlumes
+
+            ! If we still have plumes we can allocate, initiate them over
+            ! this surface patch 
+            if (patchPlumesTotal < clubb_mf_nup ) then
+               qstar   = patchLH(p)/patchFV(p)
+               thvstar = wthv/patchFV(p)
+
+               sigmaw   = alphw * wstar * cpfac
+               sigmaqt  = alphqt * abs(qstar) * cpfac
+               sigmathv = alphthv * abs(thvstar) * cpfac
+
+               wmin = sigmaw * pwmin
+               wmax = sigmaw * pwmax
+
+               pNorm = 1._r8
+
+               do i=patchPlumesTotal+1, patchPlumesTotal+patchPlumes
+                   write(iulog,*)'MDF: initiate plume i over patch p',i,p
+                   write(iulog,*)'MDF: patchPlumes = ',patchPlumes
+                   write(iulog,*)'MDF: pNorm = ',pNorm
+
+                   wlv = wmin + (wmax-wmin) / (real(patchPlumes,r8)) * (real(pNorm-1, r8))
+                   wtv = wmin + (wmax-wmin) / (real(patchPlumes,r8)) * real(pNorm,r8)
+
+                   !wlv = wmin + (wmax-wmin) / (real(clubb_mf_nup,r8)) *
+                   !(real(i-1, r8))
+                   !wtv = wmin + (wmax-wmin) / (real(clubb_mf_nup,r8)) *
+                   !real(i,r8)
+
+                   upw(1,i) = 0.5_r8 * (wlv+wtv)
+                   upa(1,i) = 0.5_r8 * erf( wtv/(sqrt(2._r8)*sigmaw) ) &
+                            - 0.5_r8 * erf( wlv/(sqrt(2._r8)*sigmaw) )
+
+                   upmf(1,i)= rho_zm(1)*upa(1,i)*upw(1,i)
+
+                   upu(1,i) = u(1)
+                   upv(1,i) = v(1)
+
+                   upqt(1,i)  = cwqt * upw(1,i) * sigmaqt/sigmaw
+                   upthv(1,i) = cwthv * upw(1,i) * sigmathv/sigmaw
+
+                   pNorm = pNorm+1._r8
+               end do ! plumes per patch 
+            end if    ! if plumes needed on this sfc patch
+
+            ! Track how many patch-based plumes we've initiated so far 
+            patchPlumesTotal = patchPlumesTotal + patchPlumes
+            write(iulog,*)'MDF: patchPlumesTotal = ',patchPlumesTotal
+
+            facqtu=1._r8
+            facthvu=1._r8
+
+            ! Omitting code for scalesrc, as this is False currently
+
+          end if  ! if wthv>0
+       end do     ! loop over every patch
+
+       write(iulog,*)'MDF: patchPlumesTotal after all patch loops = ',patchPlumesTotal
+
+    else
+       ! ------------------------------------------------- !
+       ! ----- Default options, not doing things by patch
+       ! ------------------------------------------------- !
+
+        ! surface buoyancy flux
+        wthv = wthl+zvir*ths*wqt
+
+        ! if surface buoyancy is positive then do mass-flux
+        if ( wthv > 0._r8 ) then
+           letsDoMF = .true.
+
+          ! --------------------------------------------------------- !
+          ! Initialize using Deardorff convective velocity scale      ! 
+          ! --------------------------------------------------------- !
+          convh = max(pblh,pblhmin)
+          wstar = max( wstarmin, (gravit/thv(1)*wthv*convh)**(1._r8/3._r8) )
+
+          ! --------------------------------------------------------- !
+          ! Compute cold pool feedback parameter                      ! 
+          ! --------------------------------------------------------- !
+          cpfac = 1._r8
+          if (do_clubb_mf_coldpool) cpfac = min( (max(ddcp/wstar,1._r8))**clubb_mf_ddbeta, max_cpfac ) 
  
-       ! --------------------------------------------------------- !
-       ! Construct tri-variate PDF at the surface from wstar       ! 
-       ! and initialize plume thv, qt, w                           !
-       ! --------------------------------------------------------- !
-
-       !if (do_clubb_mf_ustar) then
-       !  qstar   = wqt / max(wstarmin,ustar)
-       !  thvstar = wthv / max(wstarmin,ustar)
-       !else
-       !  qstar   = wqt / wstar
-       !  thvstar = wthv / wstar
-       !end if
-
-     !  sigmaw   = alphw * wstar * cpfac
-     !  sigmaqt  = alphqt * abs(qstar) * cpfac
-     !  sigmathv = alphthv * abs(thvstar) * cpfac
-
-     !  wmin = sigmaw * pwmin
-     !  wmax = sigmaw * pwmax
-
-       ! +++ MDF 
-       !write(iulog,*)'MDF: You are right above the patch-leve loop in clubb_mf.'
-
-       ! Check if we're initiating plumes on distinct surface patches  
-       if (do_clubb_mf_patchInit .and. landfracFromSfc==1.0_r8 .and. (.not. is_first_step())) then
-
-          ! Loop over surface patches 
-          ! TODO: Start with patch that has largest area; then next largest, and
-          ! so on. 
-          do p=1,npft 
-             write(iulog,*)'MDF (debug): patch area ',patchArea(p)
-             write(iulog,*)'MDF (debug): patchLH = ',patchLH(p)
-             write(iulog,*)'MDF (debug): patchSH = ',patchSH(p)
-
-             ! Check if patch is active (has an area in the gridcell) 
-             if (patchArea(p) > 0 .and. patchArea(p)<=1) then 
-
-                ! Number of plumes to initiate on this particular patch
-                patchPlumes = nint(clubb_mf_nup * patchArea(p))
-                !write(iulog,*)'MDF: This patch will generate n plumes: ',patchPlumes 
-
-                ! If we still have plumes we can allocate, initiate them over
-                ! this surface patch 
-                if (patchPlumesTotal < clubb_mf_nup ) then 
-                   ! surface buoyancy flux
-                   ! wthv = wthl+zvir*ths*wqt
-                   wthvPatch = patchSH(p)+zvir*patchTHS(p)*patchLH(p)
-                   
-                   qstar   = patchLH(p)/patchFV(p)
-                   thvstar = wthvPatch/patchFV(p) 
-
-                   sigmaw   = alphw * wstar * cpfac
-                   sigmaqt  = alphqt * abs(qstar) * cpfac
-                   sigmathv = alphthv * abs(thvstar) * cpfac
-
-                   wmin = sigmaw * pwmin
-                   wmax = sigmaw * pwmax 
-
-                   ! More debug options
-                   !write(iulog,*)'MDF (debug): wthvPatch = ',wthvPatch
-                   !write(iulog,*)'MDF (debug): patchLH = ',patchLH(p)
-                   !write(iulog,*)'MDF (debug): patchSH = ',patchSH(p)
-                   !write(iulog,*)'MDF (debug): patchFV = ',patchFV(p)
-                   !write(iulog,*)'MDF (debug): qstar   = ',qstar
-                   !write(iulog,*)'MDF (debug): thvstar = ',thvstar
-                   !write(iulog,*)'MDF (debug): sigmaqt = ',sigmaqt
-                   !write(iulog,*)'MDF (debug): sigmathv = ',sigmathv
-
-
-                   do i=patchPlumesTotal+1, patchPlumesTotal+patchPlumes
-                      write(iulog,*)'MDF: initiate plume i over patch p',i,p
-                      
-                      wlv = wmin + (wmax-wmin) / (real(clubb_mf_nup,r8)) * (real(i-1, r8))
-                      wtv = wmin + (wmax-wmin) / (real(clubb_mf_nup,r8)) * real(i,r8)
-
-                      upw(1,i) = 0.5_r8 * (wlv+wtv)
-                      upa(1,i) = 0.5_r8 * erf( wtv/(sqrt(2._r8)*sigmaw) ) &
-                               - 0.5_r8 * erf( wlv/(sqrt(2._r8)*sigmaw) )
-
-                      upmf(1,i)= rho_zm(1)*upa(1,i)*upw(1,i)
-
-                      upu(1,i) = u(1)
-                      upv(1,i) = v(1)
-
-                      upqt(1,i)  = cwqt * upw(1,i) * sigmaqt/sigmaw
-                      upthv(1,i) = cwthv * upw(1,i) * sigmathv/sigmaw
-
-                   end do               
-                end if
-
-                ! Track how many patch-based plumes we've initiated so far 
-                patchPlumesTotal = patchPlumesTotal + patchPlumes 
-                write(iulog,*)'MDF: patchPlumesTotal = ',patchPlumesTotal
-
-             end if
-          end do
-       else 
-          ! If not trying to do everything by patch, keep the set-up the same as
-          ! before 
-          !qstar   = wqt / wstar
-          !thvstar = wthv / wstar
+          ! --------------------------------------------------------- !
+          ! Construct tri-variate PDF at the surface from wstar       ! 
+          ! and initialize plume thv, qt, w                           !
+          ! --------------------------------------------------------- !
 
           if (do_clubb_mf_ustar) then
-            qstar   = wqt / max(wstarmin,ustar)
-            thvstar = wthv / max(wstarmin,ustar)
+             qstar   = wqt / max(wstarmin,ustar)
+             thvstar = wthv / max(wstarmin,ustar)
           else
-            qstar   = wqt / wstar
-            thvstar = wthv / wstar
+             qstar   = wqt / wstar
+             thvstar = wthv / wstar
           end if
 
           sigmaw   = alphw * wstar * cpfac
@@ -771,7 +783,11 @@ module clubb_mf
          facqtu=srfarea*wqt/srfwqtu
          facthvu=srfarea*wthv/srfwthvu
        end if
+  end if ! if doing all this by patch vs. not
 
+! --- MDF: End Big hammer section 
+
+    if (letsDoMF) then
        do i=1,clubb_mf_nup
 
          betaqt = (qt(4)-qt(2))/(0.5_r8*(dzt(4)+2._r8*dzt(3)+dzt(2)))
