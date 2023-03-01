@@ -295,6 +295,10 @@ module clubb_intr
     up_macmic2_idx, &
     dn_macmic1_idx, &
     dn_macmic2_idx, &
+    upa_macmic1_idx, &
+    upa_macmic2_idx, &
+    dna_macmic1_idx, &
+    dna_macmic2_idx, &
     thlu_macmic1_idx, &
     thlu_macmic2_idx, &
     qtu_macmic1_idx, &
@@ -485,10 +489,15 @@ module clubb_intr
       call pbuf_add_field('DDCP'               ,'global' ,  dtype_r8, (/pcols/), ddcp_idx)
       call pbuf_add_field('DDCP_MACMIC'        ,'physpkg',  dtype_r8, (/pcols/), ddcp_macmic_idx)
       call pbuf_add_field('DDCPMN'             ,'global' ,  dtype_r8, (/clubb_mf_cp_ndt,pcols/), ddcpmn_idx)
+!+++ARH
       call pbuf_add_field('up_macmic1' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps*clubb_mf_nup/), up_macmic1_idx)
       call pbuf_add_field('up_macmic2' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps*clubb_mf_nup/), up_macmic2_idx)
       call pbuf_add_field('dn_macmic1' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps*clubb_mf_nup/), dn_macmic1_idx)
       call pbuf_add_field('dn_macmic2' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps*clubb_mf_nup/), dn_macmic2_idx)
+      call pbuf_add_field('upa_macmic1' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps*clubb_mf_nup/), upa_macmic1_idx)
+      call pbuf_add_field('upa_macmic2' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps*clubb_mf_nup/), upa_macmic2_idx)
+      call pbuf_add_field('dna_macmic1' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps*clubb_mf_nup/), dna_macmic1_idx)
+      call pbuf_add_field('dna_macmic2' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps*clubb_mf_nup/), dna_macmic2_idx)
       call pbuf_add_field('thlu_macmic1' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps*clubb_mf_nup/), thlu_macmic1_idx)
       call pbuf_add_field('thlu_macmic2' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps*clubb_mf_nup/), thlu_macmic2_idx)
       call pbuf_add_field('qtu_macmic1' ,'global',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps*clubb_mf_nup/), qtu_macmic1_idx)
@@ -513,6 +522,7 @@ module clubb_intr
       call pbuf_add_field('ztop_macmic2' ,'global',  dtype_r8, (/pcols,cld_macmic_num_steps/), ztop_macmic2_idx)
       call pbuf_add_field('ddcp_macmic1' ,'global',  dtype_r8, (/pcols,cld_macmic_num_steps/), ddcp_macmic1_idx)
       call pbuf_add_field('ddcp_macmic2' ,'global',  dtype_r8, (/pcols,cld_macmic_num_steps/), ddcp_macmic2_idx)
+!---ARH
     end if
 
 #endif 
@@ -1449,6 +1459,10 @@ end subroutine clubb_init_cnst
       call addfld ( 'up_macmic2', (/ 'ilev', 'nens', 'ncyc' /), 'I', 'm/s'  , 'up' )
       call addfld ( 'dn_macmic1', (/ 'ilev', 'nens', 'ncyc' /), 'I', 'm/s'  , 'dn' )
       call addfld ( 'dn_macmic2', (/ 'ilev', 'nens', 'ncyc' /), 'I', 'm/s'  , 'dn' )
+      call addfld ( 'upa_macmic1', (/ 'ilev', 'nens', 'ncyc' /), 'I', 'fraction'  , 'upa' )
+      call addfld ( 'upa_macmic2', (/ 'ilev', 'nens', 'ncyc' /), 'I', 'fraction'  , 'upa' )
+      call addfld ( 'dna_macmic1', (/ 'ilev', 'nens', 'ncyc' /), 'I', 'fraction'  , 'dna' )
+      call addfld ( 'dna_macmic2', (/ 'ilev', 'nens', 'ncyc' /), 'I', 'fraction'  , 'dna' )
       call addfld ( 'thlu_macmic1', (/ 'ilev', 'nens', 'ncyc' /), 'I', 'm/s'  , 'thl up' )
       call addfld ( 'thlu_macmic2', (/ 'ilev', 'nens', 'ncyc' /), 'I', 'm/s'  , 'thl up' )
       call addfld ( 'qtu_macmic1', (/ 'ilev', 'nens', 'ncyc' /), 'I', 'm/s'  , 'qt up' )
@@ -1641,6 +1655,10 @@ end subroutine clubb_init_cnst
          !call add_default( 'up_macmic2' , 1, ' ')
          !call add_default( 'dn_macmic1' , 1, ' ')
          !call add_default( 'dn_macmic2' , 1, ' ')
+         !call add_default( 'upa_macmic1' , 1, ' ')
+         !call add_default( 'upa_macmic2' , 1, ' ')
+         !call add_default( 'dna_macmic1' , 1, ' ')
+         !call add_default( 'dna_macmic2' , 1, ' ')
          !call add_default( 'thlu_macmic1' , 1, ' ')
          !call add_default( 'thlu_macmic2' , 1, ' ')
          !call add_default( 'qtu_macmic1' , 1, ' ')
@@ -1746,6 +1764,10 @@ end subroutine clubb_init_cnst
          call pbuf_set_field(pbuf2d, up_macmic2_idx, 0.0_r8)
          call pbuf_set_field(pbuf2d, dn_macmic1_idx, 0.0_r8)
          call pbuf_set_field(pbuf2d, dn_macmic2_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, upa_macmic1_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, upa_macmic2_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, dna_macmic1_idx, 0.0_r8)
+         call pbuf_set_field(pbuf2d, dna_macmic2_idx, 0.0_r8)
          call pbuf_set_field(pbuf2d, thlu_macmic1_idx, 0.0_r8)
          call pbuf_set_field(pbuf2d, thlu_macmic2_idx, 0.0_r8)
          call pbuf_set_field(pbuf2d, qtu_macmic1_idx, 0.0_r8)
@@ -2187,6 +2209,10 @@ end subroutine clubb_init_cnst
    real(r8), pointer :: up_macmic2(:,:)
    real(r8), pointer :: dn_macmic1(:,:)
    real(r8), pointer :: dn_macmic2(:,:)
+   real(r8), pointer :: upa_macmic1(:,:)
+   real(r8), pointer :: upa_macmic2(:,:)
+   real(r8), pointer :: dna_macmic1(:,:)
+   real(r8), pointer :: dna_macmic2(:,:)
    real(r8), pointer :: thlu_macmic1(:,:)
    real(r8), pointer :: thlu_macmic2(:,:)
    real(r8), pointer :: qtu_macmic1(:,:)
@@ -2551,6 +2577,10 @@ end subroutine clubb_init_cnst
      call pbuf_get_field(pbuf, up_macmic2_idx, up_macmic2)
      call pbuf_get_field(pbuf, dn_macmic1_idx, dn_macmic1)
      call pbuf_get_field(pbuf, dn_macmic2_idx, dn_macmic2)
+     call pbuf_get_field(pbuf, upa_macmic1_idx, upa_macmic1)
+     call pbuf_get_field(pbuf, upa_macmic2_idx, upa_macmic2)
+     call pbuf_get_field(pbuf, dna_macmic1_idx, dna_macmic1)
+     call pbuf_get_field(pbuf, dna_macmic2_idx, dna_macmic2)
      call pbuf_get_field(pbuf, thlu_macmic1_idx, thlu_macmic1)
      call pbuf_get_field(pbuf, thlu_macmic2_idx, thlu_macmic2)
      call pbuf_get_field(pbuf, qtu_macmic1_idx, qtu_macmic1)
@@ -3231,6 +3261,10 @@ end subroutine clubb_init_cnst
         if (macmic_it==1) up_macmic2(i,:) = 0._r8
         if (macmic_it==1) dn_macmic1(i,:) = 0._r8
         if (macmic_it==1) dn_macmic2(i,:) = 0._r8
+        if (macmic_it==1) upa_macmic1(i,:) = 0._r8
+        if (macmic_it==1) upa_macmic2(i,:) = 0._r8
+        if (macmic_it==1) dna_macmic1(i,:) = 0._r8
+        if (macmic_it==1) dna_macmic2(i,:) = 0._r8
         if (macmic_it==1) thlu_macmic1(i,:) = 0._r8
         if (macmic_it==1) thlu_macmic2(i,:) = 0._r8
         if (macmic_it==1) qtu_macmic1(i,:) = 0._r8
@@ -3493,6 +3527,22 @@ end subroutine clubb_init_cnst
            end do
 
            do k=1,nlev+1
+             flip(pverp-k+1,:clubb_mf_nup) = mf_upa(k,:clubb_mf_nup)
+           end do
+
+           do k=1,clubb_mf_nup
+             upa_macmic1( i, 1+pverp*(clubb_mf_nup*(macmic_it-1)+k-1):pverp*(clubb_mf_nup*(macmic_it-1)+k) ) = flip(:pverp,k)
+           end do
+
+           do k=1,nlev+1
+             flip(pverp-k+1,:clubb_mf_nup) = mf_dna(k,:clubb_mf_nup)
+           end do
+
+           do k=1,clubb_mf_nup
+             dna_macmic1( i, 1+pverp*(clubb_mf_nup*(macmic_it-1)+k-1):pverp*(clubb_mf_nup*(macmic_it-1)+k) ) = flip(:pverp,k)
+           end do
+
+           do k=1,nlev+1
              flip(pverp-k+1,:clubb_mf_nup) = mf_upthl(k,:clubb_mf_nup)
            end do
 
@@ -3573,6 +3623,22 @@ end subroutine clubb_init_cnst
 
            do k=1,clubb_mf_nup
              dn_macmic2( i, 1+pverp*(clubb_mf_nup*(macmic_it-1)+k-1):pverp*(clubb_mf_nup*(macmic_it-1)+k) ) = flip(:pverp,k)
+           end do
+
+           do k=1,nlev+1
+             flip(pverp-k+1,:clubb_mf_nup) = mf_upa(k,:clubb_mf_nup)
+           end do
+
+           do k=1,clubb_mf_nup
+             upa_macmic2( i, 1+pverp*(clubb_mf_nup*(macmic_it-1)+k-1):pverp*(clubb_mf_nup*(macmic_it-1)+k) ) = flip(:pverp,k)
+           end do
+
+           do k=1,nlev+1
+             flip(pverp-k+1,:clubb_mf_nup) = mf_dna(k,:clubb_mf_nup)
+           end do
+
+           do k=1,clubb_mf_nup
+             dna_macmic2( i, 1+pverp*(clubb_mf_nup*(macmic_it-1)+k-1):pverp*(clubb_mf_nup*(macmic_it-1)+k) ) = flip(:pverp,k)
            end do
 
            do k=1,nlev+1
@@ -4844,6 +4910,10 @@ end subroutine clubb_init_cnst
        call outfld( 'up_macmic2'   , up_macmic2,     pcols, lchnk )
        call outfld( 'dn_macmic1'   , dn_macmic1,     pcols, lchnk )
        call outfld( 'dn_macmic2'   , dn_macmic2,     pcols, lchnk )
+       call outfld( 'upa_macmic1'  , upa_macmic1,    pcols, lchnk )
+       call outfld( 'upa_macmic2'  , upa_macmic2,    pcols, lchnk )
+       call outfld( 'dna_macmic1'  , dna_macmic1,    pcols, lchnk )
+       call outfld( 'dna_macmic2'  , dna_macmic2,    pcols, lchnk )
        call outfld( 'thlu_macmic1' , thlu_macmic1,   pcols, lchnk )
        call outfld( 'thlu_macmic2' , thlu_macmic2,   pcols, lchnk )
        call outfld( 'qtu_macmic1'  , qtu_macmic1,    pcols, lchnk )
