@@ -3971,9 +3971,20 @@ Default: 1.0
 Enhancement factor for the near surface pressure drag term in downdraft equation
 Default: 1.0
 
+<entry id="clubb_mf_ddexp" type="real" category="conv"
+       group="clubb_mf_nl" valid_values="" >
+Elevation power law exponent for downdrafts velocities in the subcloud layer
+Default: 3.0
+
 <entry id="do_clubb_mf_ustar" type="logical" category="conv"
        group="clubb_mf_nl" valid_values="" >
 If .true. use ustar for initializing the plume ensemble
+Default: .false.
+</entry>
+
+<entry id="do_clubb_mf_mixd" type="logical" category="conv"
+       group="clubb_mf_nl" valid_values="" >
+If .true. use clubbmf mixing depth in place of the PBLH pbuf var
 Default: .false.
 </entry>
 

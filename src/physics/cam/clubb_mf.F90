@@ -53,6 +53,7 @@ module clubb_mf
   real(r8) :: clubb_mf_ddalph  = 0._r8  
   real(r8) :: clubb_mf_ddbeta  = 0._r8
   real(r8) :: clubb_mf_pwfac   = 0._r8
+  real(r8) :: clubb_mf_ddexp   = 0._r8
   integer  :: clubb_mf_up_ndt  = 1
   integer  :: clubb_mf_cp_ndt  = 1
   integer, protected :: clubb_mf_nup     = 0
@@ -65,6 +66,7 @@ module clubb_mf
   logical, protected :: do_clubb_mf_patchInit = .false.
   ! --- MDF 
   logical, protected :: do_clubb_mf_ustar = .false.
+  logical, protected :: do_clubb_mf_mixd = .false.
   logical, protected :: do_clubb_mf_precip = .false.
   logical :: tht_tweaks = .true.
   integer :: mf_num_cin = 5
@@ -93,7 +95,7 @@ module clubb_mf
                            do_clubb_mf_patchInit, &
                            ! --- MDF
                            clubb_mf_fdd, do_clubb_mf_coldpool, clubb_mf_ddalph, clubb_mf_ddbeta, clubb_mf_pwfac, do_clubb_mf_ustar, &
-                           clubb_mf_up_ndt, clubb_mf_cp_ndt
+                           clubb_mf_ddexp, do_clubb_mf_mixd, clubb_mf_up_ndt, clubb_mf_cp_ndt
 
     if (masterproc) then
       open( newunit=iunit, file=trim(nlfile), status='old' )
@@ -151,6 +153,10 @@ module clubb_mf
     if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_mf_cp_ndt")
     call mpi_bcast(do_clubb_mf_ustar, 1, mpi_logical, mstrid, mpicom, ierr)
     if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: do_clubb_mf_ustar")
+    call mpi_bcast(clubb_mf_ddexp,  1, mpi_real8,   mstrid, mpicom, ierr)
+    if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_mf_ddexp")
+    call mpi_bcast(do_clubb_mf_mixd, 1, mpi_logical, mstrid, mpicom, ierr)
+    if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: do_clubb_mf_mixd")
 
     if ((.not. do_clubb_mf) .and. do_clubb_mf_diag ) then
        call endrun('clubb_mf_readnl: Error - cannot turn on do_clubb_mf_diag without also turning on do_clubb_mf')
@@ -178,7 +184,7 @@ module clubb_mf
                            patchSH, patchLH, patchFV, patchTHS,                     & ! input 
               ! --- MDF
                            wpthlp_env, tke,  tpert,  ztopm1,     rhinv,             & ! input
-                           mcape,      ddcp,                                        & ! output
+                           mcape,      ddcp, cbm1,                                  & ! output
                            upa,     dna,                                            & ! output
                            upw,     dnw,                                            & ! output
                            upmf,                                                    & ! output
@@ -268,7 +274,7 @@ module clubb_mf
                                                 patchLH, patchFV, patchTHS 
      !--- MDF 
 
-     real(r8), intent(inout)             :: ztopm1,ddcp
+     real(r8), intent(inout)             :: ztopm1,ddcp,cbm1
 
      real(r8),dimension(nz,clubb_mf_nup), intent(out) :: upa,     & ! momentum grid
                                                          upw,     & ! momentum grid
@@ -349,6 +355,7 @@ module clubb_mf
      ! 
      ! other variables
      integer                              :: k,i,kstart,ddtop,kcb
+     integer,  dimension(clubb_mf_nup)    :: ddbot,kcbarr
      real(r8), dimension(clubb_mf_nup)    :: zcb
      real(r8)                             :: zcb_unset,       cpfac,   &
                                              wthv,   ddint,   iddcp,   &
@@ -370,7 +377,8 @@ module clubb_mf
                                              wn,                       & ! momentum grid
                                              lmixn,   srfarea,         & ! momentum grid
                                              srfwqtu, srfwthvu,        &
-                                             facqtu,  facthvu
+                                             facqtu,  facthvu,         &
+                                             zsub,    wcb
 
 !     !
 !     ! cape variables
@@ -709,7 +717,13 @@ module clubb_mf
           ! --------------------------------------------------------- !
           ! Initialize using Deardorff convective velocity scale      ! 
           ! --------------------------------------------------------- !
-          convh = max(pblh,pblhmin)
+          if (do_clubb_mf_mixd) then
+            convh = max(cbm1,pblhmin)
+          else
+            convh = max(pblh,pblhmin)
+          end if
+
+          !convh = max(pblh,pblhmin)
           wstar = max( wstarmin, (gravit/thv(1)*wthv*convh)**(1._r8/3._r8) )
 
           ! --------------------------------------------------------- !
@@ -717,7 +731,7 @@ module clubb_mf
           ! --------------------------------------------------------- !
           cpfac = 1._r8
           if (do_clubb_mf_coldpool) cpfac = min( (max(ddcp/wstar,1._r8))**clubb_mf_ddbeta, max_cpfac ) 
- 
+
           ! --------------------------------------------------------- !
           ! Construct tri-variate PDF at the surface from wstar       ! 
           ! and initialize plume thv, qt, w                           !
@@ -1104,7 +1118,17 @@ module clubb_mf
        if (do_clubb_mf_precip .and. clubb_mf_fdd > 0._r8) then       
 
          do i=1,clubb_mf_nup
+
+           ! find cloud base
+           ddbot(i) = 0
+           do k = 1,nz
+             if (upqc(k,i) > 0._r8) then
+               ddbot(i) = k
+               exit
+             end if
+           end do
  
+           ! find cloud top
            ddtop = 0
            do k = 1,nz
              if (uprr(k,i) > 0._r8) ddtop = k
@@ -1202,30 +1226,45 @@ module clubb_mf
                  dnrr(k,i) = max( dnrr(k+1,i) &
                                   - rho_zt(k+1)*dzt(k+1)*(sdnqt(k,i) + upauto(k+1,i)*clubb_mf_fdd) , 0._r8 )
                end if
-     
 
                ! get virtual temperature
                dnthv(k,i) = dnthl(k,i)*(1._r8+zvir*dnqt(k,i))
+     
+               if (k > ddbot(i)) then
+                 ! get virtual temperature
+                 dnthv(k,i) = dnthl(k,i)*(1._r8+zvir*dnqt(k,i))
 
-               ! get buoyancy
-               ! (midpoint k is surrounded by interface k and k-1,
-               ! and therefore we can't compute B at the midpoint properly)
-               B = gravit*(dnthv(k,i)/thv(k)-1._r8)
+                 ! get buoyancy
+                 ! (midpoint k is surrounded by interface k and k-1,
+                 ! and therefore we can't compute B at the midpoint properly)
+                 B = gravit*(dnthv(k,i)/thv(k)-1._r8)
 
-               ! get wn2
-               wp = wb*entn*eturb  &
-                    + clubb_mf_pwfac/( 2._r8*zm(k)+tinynum ) * max( 1._r8 - exp( zm(k)/z00dn-1._r8), 0._r8 )
-               if (wp==0._r8) then
-                 wn2 = dnw(k+1,i)**2._r8-2._r8*wa*B*dzt(k+1)
+                 ! get wn2
+                 wp = wb*entn*eturb  &
+                      + clubb_mf_pwfac/( 2._r8*zm(k)+tinynum ) * max( 1._r8 - exp( zm(k)/z00dn-1._r8), 0._r8 )
+                 if (wp==0._r8) then
+                   wn2 = dnw(k+1,i)**2._r8-2._r8*wa*B*dzt(k+1)
+                 else
+                   entw = exp(-2._r8*wp*dzt(k+1))
+                   wn2 = entw*dnw(k+1,i)**2._r8-(1._r8-entw)*wa*B/wp
+                 end if
+                 wn2 = max(wn2,mindnw**2._r8)
+                 dnw(k,i) = -1._r8*sqrt(wn2)
+
+                 ! enforce net positive mass flux at cloud base
+                 !if (k == (ddbot(i)+1)) then
+                 !  if (sqrt(wn2) > upw(k,i)) dnw(k,i) = -1._r8*upw(k,i)
+                 !end if
+
                else
-                 entw = exp(-2._r8*wp*dzt(k+1))
-                 wn2 = entw*dnw(k+1,i)**2._r8-(1._r8-entw)*wa*B/wp
+                 zsub = zm(ddbot(i)+1)
+                 wcb  = dnw(ddbot(i)+1,i)
+                 dnw(k,i) = wcb - (wcb/(zsub**clubb_mf_ddexp))*(zsub - zm(k))**clubb_mf_ddexp
+                 dnw(k,i) = min(dnw(k,i),-1._r8*mindnw)
                end if
-               wn2 = max(wn2,mindnw**2._r8)
-               dnw(k,i) = -1._r8*sqrt(wn2)
 
              end do!k
- 
+
            end if
 
          end do!i
@@ -1235,7 +1274,10 @@ module clubb_mf
          ! zero out downdraft fluxes for dnw == -mindnw
          do i=1,clubb_mf_nup
            do k=1,nz
-             if ( dnw(k,i) == -1._r8*mindnw ) dnw(k,i) = 0._r8
+             if ( dnw(k,i) == -1._r8*mindnw ) then
+               dnw(k,i) = 0._r8
+               dna(k,i) = 0._r8
+             end if
            end do
          end do
 
@@ -1393,38 +1435,78 @@ module clubb_mf
        end do
 
        ! --------------------------------------------------------- !
-       ! bulk downdraft velocity for coldpool parameterization     ! 
+       ! cloud base / mixing depth calculation                                        ! 
        ! --------------------------------------------------------- !
-
-       ! reset ddcp
-       ddcp = 0._r8
+       cbm1 = 0._r8
        do i=1,clubb_mf_nup
-         ! find cloud base
-         kcb = 0
+         kcbarr(i) = 0
          do k=1,nz
            if (upqc(k,i) > 0._r8) then
-             kcb = k
+             kcbarr(i) = k
              exit
            end if
          end do
- 
-         ! reset iddcp
-         iddcp = 0._r8
-         if (kcb == 0) then
-           continue
-         else if (kcb == 1) then
-           iddcp = iddcp + dna(k,i)*dnw(k,i)
+
+         ! find height of dry plumes
+         if (kcbarr(i) == 0) then
+           do k=1,nz
+             if (upw(k,i) <= 0._r8) then
+               kcbarr(i) = k
+               exit
+             end if
+           end do
+         end if
+
+         cbm1 = cbm1 + zm(kcbarr(i))
+
+       end do
+       cbm1 = cbm1/REAL(clubb_mf_nup)
+
+       ! --------------------------------------------------------- !
+       ! bulk downdraft velocity for coldpool parameterization     ! 
+       ! --------------------------------------------------------- !
+!+++ARH
+!       ! reset ddcp
+!       ddcp = 0._r8
+!       do i=1,clubb_mf_nup
+!         ! find cloud base
+!         kcb = 0
+!         do k=1,nz
+!           if (upqc(k,i) > 0._r8) then
+!             kcb = k
+!             exit
+!           end if
+!         end do
+! 
+!         ! reset iddcp
+!         iddcp = 0._r8
+!         if (kcb == 0) then
+!           continue
+!         else if (kcb == 1) then
+!           iddcp = iddcp + dna(k,i)*dnw(k,i)
+!           continue
+!         else
+!           ddint = 0._r8
+!           do k=1,kcb-1
+!             ddint = ddint + dna(k,i)*dnw(k,i)*dzt(k+1)
+!           end do
+!           iddcp = iddcp + -1._r8*ddint/zm(kcb)
+!         end if
+!         ddcp = ddcp + iddcp 
+!         !
+!       end do
+!
+       ! use single level for cold pool param.
+       ! reset ddcp
+       ddcp = 0._r8
+       do i=1,clubb_mf_nup
+         if (ddbot(i) == 0) then
            continue
          else
-           ddint = 0._r8
-           do k=1,kcb-1
-             ddint = ddint + dna(k,i)*dnw(k,i)*dzt(k+1)
-           end do
-           iddcp = iddcp + -1._r8*ddint/zm(kcb)
+           ddcp = ddcp + -1._r8*dna(ddbot(i)+1,i)*dnw(ddbot(i)+1,i)
          end if
-         ddcp = ddcp + iddcp 
-         !
        end do
+!---ARH
 
        ! --------------------------------------------------------- !
        ! downward sweep to get ensemble mean precip                ! 
