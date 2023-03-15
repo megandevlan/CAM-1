@@ -206,6 +206,7 @@ module clubb_mf
                            ae,                                                      &
                            ac,      aup,     adn,                                   &
                            aw,      awup,    awdn,                                  & 
+                           aww,     awwup,   awwdn,                                 &
                            awthlup, awqtup,                                         & ! output
                            awthldn, awqtdn,                                         & ! output
                            awthl,   awqt,                                           & ! output
@@ -307,6 +308,7 @@ module clubb_mf
      real(r8),dimension(nz), intent(out) :: ae,                      &
                                             ac,      aup,     adn,   &
                                             aw,      awup,    awdn,  &
+                                            aww,     awwup,  awwdn,  &
                                             awthlup, awqtup,         & ! momentum grid
                                             awthldn, awqtdn,         & ! momentum grid
                                             awthl,   awqt,           & ! momentum grid
@@ -510,6 +512,9 @@ module clubb_mf
      aw        = 0._r8 
      awup      = 0._r8
      awdn      = 0._r8
+     aww       = 0._r8
+     awwup     = 0._r8
+     awwdn     = 0._r8
      awthvup   = 0._r8
      awthvdn   = 0._r8
      awthlup   = 0._r8
@@ -1391,6 +1396,9 @@ module clubb_mf
            awup(k) = awup(k) + upa(k,i)*upw(k,i)
            awdn(k) = awdn(k) + dna(k,i)*dnw(k,i)
 
+           awwup(k) = awwup(k) + upa(k,i)*upw(k,i)*upw(k,i)
+           awwdn(k) = awwdn(k) + dna(k,i)*dnw(k,i)*dnw(k,i)
+
            awthvdn(k)= awthvdn(k)+ dna(k,i)*dnw(k,i)*dnthv(k,i)
            awthldn(k)= awthldn(k)+ dna(k,i)*dnw(k,i)*dnthl(k,i)
            awqtdn(k) = awqtdn(k) + dna(k,i)*dnw(k,i)*dnqt(k,i)
@@ -1412,7 +1420,8 @@ module clubb_mf
 
          enddo
 
-         aw (k) = awup(k) + awdn(k)
+         aw (k) = awup(k)+ awdn(k)
+         aww(k) = awwup(k)+ awwdn(k)
          sqt(k) = sqtup(k) + sqtdn(k)
          sthl(k)= sthlup(k) + sthldn(k)
 

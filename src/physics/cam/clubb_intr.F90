@@ -1394,6 +1394,7 @@ end subroutine clubb_init_cnst
       call addfld ( 'edmf_precc'    , (/ 'ilev' /), 'A', 'm/s'     , 'Moist updraft precipitation rate (EDMF)' )
       call addfld ( 'edmf_S_AE'     , (/ 'ilev' /), 'A', 'fraction', '1 minus sum of a_i*w_i (EDMF)' )
       call addfld ( 'edmf_S_AW'     , (/ 'ilev' /), 'A', 'm/s'     , 'Sum of a_i*w_i (EDMF)' )
+      call addfld ( 'edmf_S_AWW'    , (/ 'ilev' /), 'A', 'm2/s2'   , 'Sum of a_i*w_i*w_i (EDMF)' )
       call addfld ( 'edmf_S_AWTHL'  , (/ 'ilev' /), 'A', 'K m/s'   , 'Sum of a_i*w_i*thl_i (EDMF)' )
       call addfld ( 'edmf_S_AWQT'   , (/ 'ilev' /), 'A', 'kgm/kgs' , 'Sum of a_i*w_i*q_ti (EDMF)' )
       call addfld ( 'edmf_S_AWTH'   , (/ 'ilev' /), 'A', 'K m/s'   , 'Sum of a_i*w_i*th_i (EDMF)' )
@@ -1608,6 +1609,7 @@ end subroutine clubb_init_cnst
          call add_default( 'edmf_precc'    , 1, ' ')
          call add_default( 'edmf_S_AE'     , 1, ' ')
          call add_default( 'edmf_S_AW'     , 1, ' ')
+         call add_default( 'edmf_S_AWW'    , 1, ' ')
          call add_default( 'edmf_S_AWTH'   , 1, ' ')
          call add_default( 'edmf_S_AWTHL'  , 1, ' ')
          call add_default( 'edmf_S_AWQT'   , 1, ' ')
@@ -2270,6 +2272,7 @@ end subroutine clubb_init_cnst
                                            s_awthldn_output,  s_awqtdn_output,     &
                                            s_awthl_output,    s_awqt_output,       &
                                            s_awu_output,      s_awv_output,        &
+                                           s_aww_output,                           &
                                            mf_thlflxup_output,mf_qtflxup_output,   &
                                            mf_thlflxdn_output,mf_qtflxdn_output,   &
                                            mf_thlflx_output,  mf_qtflx_output,     &
@@ -2341,6 +2344,8 @@ end subroutine clubb_init_cnst
                                            s_aup,      s_adn,          &
                                            s_aw,                       &
                                            s_awup,     s_awdn,         &
+                                           s_aww,                      &
+                                           s_awwup,    s_awwdn,        &
                                            s_awthlup,  s_awqtup,       &
                                            s_awthldn,  s_awqtdn,       &
                                            s_awthl,    s_awqt,         &
@@ -2870,6 +2875,7 @@ end subroutine clubb_init_cnst
    s_awqt_output(:,:)       = 0._r8
    s_awu_output(:,:)        = 0._r8
    s_awv_output(:,:)        = 0._r8
+   s_aww_output(:,:)        = 0._r8
    mf_upa_output(:,:)       = 0._r8
    mf_upw_output(:,:)       = 0._r8
    mf_upmf_output(:,:)      = 0._r8
@@ -3415,6 +3421,7 @@ end subroutine clubb_init_cnst
                               s_ae,                                                           & ! output - plume diagnostics
                               s_ac,        s_aup,      s_adn,                                 & ! output - plume diagnostics
                               s_aw,        s_awup,     s_awdn,                                & ! output - plume diagnostics
+                              s_aww,       s_awwup,    s_awwdn,                               & ! output - plume diagnostics
                               s_awthlup,   s_awqtup,                                          & ! output - plume diagnostics
                               s_awthldn,   s_awqtdn,                                          & ! output - plume diagnostics
                               s_awthl,     s_awqt,                                            & ! output - plume diagnostics
@@ -4008,6 +4015,7 @@ end subroutine clubb_init_cnst
 
            s_awu_output(i,pverp-k+1)        = s_awu(k)
            s_awv_output(i,pverp-k+1)        = s_awv(k)
+           s_aww_output(i,pverp-k+1)        = s_aww(k)
 
            mf_thlflxup_output(i,pverp-k+1)  = mf_thlflxup(k)
            mf_qtflxup_output(i,pverp-k+1)   = mf_qtflxup(k)
@@ -4859,6 +4867,7 @@ end subroutine clubb_init_cnst
      call outfld( 'edmf_precc'    , mf_precc_output,           pcols, lchnk )
      call outfld( 'edmf_S_AE'     , s_ae_output,               pcols, lchnk )
      call outfld( 'edmf_S_AW'     , s_aw_output,               pcols, lchnk )
+     call outfld( 'edmf_S_AWW'    , s_aww_output,              pcols, lchnk )
      call outfld( 'edmf_S_AWTHL'  , s_awthl_output,            pcols, lchnk )
      call outfld( 'edmf_S_AWQT'   , s_awqt_output,             pcols, lchnk )
      call outfld( 'edmf_S_AWU'    , s_awu_output,              pcols, lchnk )
