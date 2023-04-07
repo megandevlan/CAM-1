@@ -207,6 +207,10 @@ module clubb_mf
                            ac,      aup,     adn,                                   &
                            aw,      awup,    awdn,                                  & 
                            aww,     awwup,   awwdn,                                 &
+                           ! +++ MDF 
+                           athlthl, athlthlup, athlthldn,                           &
+                           aqtqt,   aqtqtup,   aqtqtdn,                             &
+                           ! --- MDF 
                            awthlup, awqtup,                                         & ! output
                            awthldn, awqtdn,                                         & ! output
                            awthl,   awqt,                                           & ! output
@@ -309,6 +313,10 @@ module clubb_mf
                                             ac,      aup,     adn,   &
                                             aw,      awup,    awdn,  &
                                             aww,     awwup,  awwdn,  &
+                                            ! +++ MDF 
+                                            athlthl, athlthlup, athlthldn, & 
+                                            aqtqt,   aqtqtup,   aqtqtdn,   & 
+                                            ! --- MDF 
                                             awthlup, awqtup,         & ! momentum grid
                                             awthldn, awqtdn,         & ! momentum grid
                                             awthl,   awqt,           & ! momentum grid
@@ -515,6 +523,14 @@ module clubb_mf
      aww       = 0._r8
      awwup     = 0._r8
      awwdn     = 0._r8
+     ! +++ MDF
+     athlthl   = 0._r8 
+     athlthlup = 0._r8
+     athlthldn = 0._r8
+     aqtqt     = 0._r8 
+     aqtqtup   = 0._r8
+     aqtqtdn   = 0._r8
+     ! --- MDF 
      awthvup   = 0._r8
      awthvdn   = 0._r8
      awthlup   = 0._r8
@@ -669,6 +685,9 @@ module clubb_mf
                    write(iulog,*)'MDF: patchPlumes = ',patchPlumes
                    write(iulog,*)'MDF: pNorm = ',pNorm
 
+                   write(iulog,*)'MDF: patchArea    = ',patchArea(p)
+                   write(iulog,*)'MDF: patchSH      = ',patchSH(p)*rho_zm(1)*cpair
+                   write(iulog,*)'MDF: patchLH      = ',patchLH(p)*rho_zm(1)
                    wlv = wmin + (wmax-wmin) / (real(patchPlumes,r8)) * (real(pNorm-1, r8))
                    wtv = wmin + (wmax-wmin) / (real(patchPlumes,r8)) * real(pNorm,r8)
 
@@ -678,8 +697,8 @@ module clubb_mf
                    !real(i,r8)
 
                    upw(1,i) = 0.5_r8 * (wlv+wtv)
-                   upa(1,i) = 0.5_r8 * erf( wtv/(sqrt(2._r8)*sigmaw) ) &
-                            - 0.5_r8 * erf( wlv/(sqrt(2._r8)*sigmaw) )
+                   upa(1,i) = patchArea(p)*(0.5_r8 * erf( wtv/(sqrt(2._r8)*sigmaw) ) &
+                            - 0.5_r8 * erf( wlv/(sqrt(2._r8)*sigmaw) ))
 
                    upmf(1,i)= rho_zm(1)*upa(1,i)*upw(1,i)
 
@@ -688,6 +707,9 @@ module clubb_mf
 
                    upqt(1,i)  = cwqt * upw(1,i) * sigmaqt/sigmaw
                    upthv(1,i) = cwthv * upw(1,i) * sigmathv/sigmaw
+
+                   write(iulog,*)'MDF: upqt(1,i) = ',upqt(1,i) 
+                   write(iulog,*)'MDF: upthv(1,i) = ',upthv(1,i)
 
                    pNorm = pNorm+1._r8
                end do ! plumes per patch 
@@ -699,8 +721,6 @@ module clubb_mf
 
             facqtu=1._r8
             facthvu=1._r8
-
-            ! Omitting code for scalesrc, as this is False currently
 
           end if  ! if wthv>0
        end do     ! loop over every patch
@@ -758,14 +778,14 @@ module clubb_mf
           wmax = sigmaw * pwmax
 
           ! More debug options
-          write(iulog,*)'MDF (debug): wthv = ',wthv
-          write(iulog,*)'MDF (debug): wthl = ',wthl
-          write(iulog,*)'MDF (debug): wqt = ',wqt
-          write(iulog,*)'MDF (debug): wstar = ',wstar
-          write(iulog,*)'MDF (debug): qstar   = ',qstar
-          write(iulog,*)'MDF (debug): thvstar = ',thvstar
-          write(iulog,*)'MDF (debug): sigmaqt = ',sigmaqt
-          write(iulog,*)'MDF (debug): sigmathv = ',sigmathv
+          !write(iulog,*)'MDF (debug): wthv = ',wthv
+          !write(iulog,*)'MDF (debug): wthl = ',wthl
+          !write(iulog,*)'MDF (debug): wqt = ',wqt
+          !write(iulog,*)'MDF (debug): wstar = ',wstar
+          !write(iulog,*)'MDF (debug): qstar   = ',qstar
+          !write(iulog,*)'MDF (debug): thvstar = ',thvstar
+          !write(iulog,*)'MDF (debug): sigmaqt = ',sigmaqt
+          !write(iulog,*)'MDF (debug): sigmathv = ',sigmathv
 
           do i=1,clubb_mf_nup
             wlv = wmin + (wmax-wmin) / (real(clubb_mf_nup,r8)) * (real(i-1, r8))
@@ -1399,6 +1419,15 @@ module clubb_mf
            awwup(k) = awwup(k) + upa(k,i)*upw(k,i)*upw(k,i)
            awwdn(k) = awwdn(k) + dna(k,i)*dnw(k,i)*dnw(k,i)
 
+           ! +++ MDF
+           !athlthlup(k)  = athlthlup(k) + upa(k,i)*upthl(k,i)*upthl(k,i)
+           !athlthldn(k)  = athlthldn(k) + dna(k,i)*dnthl(k,i)*dnthl(k,i)
+
+           !aqtqtup(k)    = aqtqtup(k)   + upa(k,i)*upqt(k,i)*upqt(k,i)
+           !aqtqtdn(k)    = aqtqtdn(k)   + dna(k,i)*dnqt(k,i)*dnqt(k,i)
+
+           ! --- MDF
+
            awthvdn(k)= awthvdn(k)+ dna(k,i)*dnw(k,i)*dnthv(k,i)
            awthldn(k)= awthldn(k)+ dna(k,i)*dnw(k,i)*dnthl(k,i)
            awqtdn(k) = awqtdn(k) + dna(k,i)*dnw(k,i)*dnqt(k,i)
@@ -1410,12 +1439,20 @@ module clubb_mf
            awu (k) = awu (k) + upa(k,i)*upw(k,i)*upu(k,i)
            awv (k) = awv (k) + upa(k,i)*upw(k,i)*upv(k,i)
 
-           if (k > 1) then
-             sqtup(k)  = sqtup(k)  + 0.5_r8*(upa(k,i)+upa(k-1,i))*supqt(k,i)  
-             sthlup(k) = sthlup(k) + 0.5_r8*(upa(k,i)+upa(k-1,i))*supthl(k,i) 
+           !if (k > 1) then
+           !  sqtup(k)  = sqtup(k)  + 0.5_r8*(upa(k,i)+upa(k-1,i))*supqt(k,i)  
+           !  sthlup(k) = sthlup(k) + 0.5_r8*(upa(k,i)+upa(k-1,i))*supthl(k,i) 
 
-             sqtdn(k)  = sqtdn(k)  + 0.5_r8*(dna(k,i)+dna(k-1,i))*sdnqt(k,i)
-             sthldn(k) = sthldn(k) + 0.5_r8*(dna(k,i)+dna(k-1,i))*sdnthl(k,i)
+           !  sqtdn(k)  = sqtdn(k)  + 0.5_r8*(dna(k,i)+dna(k-1,i))*sdnqt(k,i)
+           !  sthldn(k) = sthldn(k) + 0.5_r8*(dna(k,i)+dna(k-1,i))*sdnthl(k,i)
+           !end if
+
+           if (k > 1) then
+             sqtup(k)  = sqtup(k)  + upa(k-1,i)*supqt(k,i)  
+             sthlup(k) = sthlup(k) + upa(k-1,i)*supthl(k,i) 
+
+             sqtdn(k)  = sqtdn(k)  + dna(k,i)*sdnqt(k,i)
+             sthldn(k) = sthldn(k) + dna(k,i)*sdnthl(k,i)
            end if
 
          enddo
@@ -1475,46 +1512,47 @@ module clubb_mf
        ! bulk downdraft velocity for coldpool parameterization     ! 
        ! --------------------------------------------------------- !
 !+++ARH
-!       ! reset ddcp
-!       ddcp = 0._r8
-!       do i=1,clubb_mf_nup
-!         ! find cloud base
-!         kcb = 0
-!         do k=1,nz
-!           if (upqc(k,i) > 0._r8) then
-!             kcb = k
-!             exit
-!           end if
-!         end do
-! 
-!         ! reset iddcp
-!         iddcp = 0._r8
-!         if (kcb == 0) then
-!           continue
-!         else if (kcb == 1) then
-!           iddcp = iddcp + dna(k,i)*dnw(k,i)
-!           continue
-!         else
-!           ddint = 0._r8
-!           do k=1,kcb-1
-!             ddint = ddint + dna(k,i)*dnw(k,i)*dzt(k+1)
-!           end do
-!           iddcp = iddcp + -1._r8*ddint/zm(kcb)
-!         end if
-!         ddcp = ddcp + iddcp 
-!         !
-!       end do
-!
-       ! use single level for cold pool param.
        ! reset ddcp
        ddcp = 0._r8
        do i=1,clubb_mf_nup
-         if (ddbot(i) == 0) then
+         ! find cloud base
+         kcb = 0
+         do k=1,nz
+           if (upqc(k,i) > 0._r8) then
+             kcb = k
+             exit
+           end if
+         end do
+ 
+         ! reset iddcp
+         iddcp = 0._r8
+         if (kcb == 0) then
+           continue
+         else if (kcb == 1) then
+           iddcp = iddcp + dna(k,i)*dnw(k,i)
            continue
          else
-           ddcp = ddcp + -1._r8*dna(ddbot(i)+1,i)*dnw(ddbot(i)+1,i)
+           ddint = 0._r8
+           do k=1,kcb-1
+             ddint = ddint + dna(k,i)*dnw(k,i)*dzt(k+1)
+           end do
+           iddcp = iddcp + -1._r8*ddint/zm(kcb)
          end if
+         ddcp = ddcp + iddcp 
+         !
        end do
+
+
+!       ! use single level for cold pool param.
+!       ! reset ddcp
+!       ddcp = 0._r8
+!       do i=1,clubb_mf_nup
+!         if (ddbot(i) == 0) then
+!           continue
+!         else
+!           ddcp = ddcp + -1._r8*dna(ddbot(i)+1,i)*dnw(ddbot(i)+1,i)
+!         end if
+!       end do
 !---ARH
 
        ! --------------------------------------------------------- !
@@ -1556,7 +1594,44 @@ module clubb_mf
          thvflx(k)  = thvflxup(k) + thvflxdn(k)
          thlflx(k)  = thlflxup(k) + thlflxdn(k)
          qtflx (k)  = qtflxup (k) + qtflxdn (k)
+
+         ! +++ MDF: Get variances 
+         !athlthl(k) = (athlthlup(k)- aup(k)*thl_env(k+1)*thl_env(k+1))+(athlthldn(k)- adn(k)*thl_env(k)*thl_env(k))
+         !aqtqt(k) = (aqtqtup(k)- aup(k)*qt_env(k+1)*qt_env(k+1))+(aqtqtdn(k)- adn(k)*qt_env(k)*qt_env(k))
+         ! --- MDF 
        enddo
+
+       ! +++ MDF 
+       ! Compute temperature and moisture variances 
+       do k=1,nz-1
+         do i=1,clubb_mf_nup
+
+           athlthlup(k)  = athlthlup(k) + upa(k,i)*(upthl(k,i)-thl_env(k+1))*(upthl(k,i)-thl_env(k+1))
+           athlthldn(k)  = athlthldn(k) + dna(k,i)*(dnthl(k,i)-thl_env(k))*(dnthl(k,i)-thl_env(k))
+
+           aqtqtup(k)    = aqtqtup(k)   + upa(k,i)*(upqt(k,i)-qt_env(k+1))*(upqt(k,i)-qt_env(k+1))
+           aqtqtdn(k)    = aqtqtdn(k)   + dna(k,i)*(dnqt(k,i)-qt_env(k))*(dnqt(k,i)-qt_env(k))
+  
+           if (k==1) then
+              write(iulog,*)'MDF (figure out plume sfc): '
+              write(iulog,*)'   upa(k,i)   = ',upa(k,i)
+              write(iulog,*)'   upqt(k,i)  = ',upqt(k,i)
+              write(iulog,*)'   upthl(k,i) = ',upthl(k,i)
+           end if
+
+         end do
+         athlthl(k) = athlthlup(k) + athlthldn(k)
+         aqtqt(k)   = aqtqtup(k)   + aqtqtdn(k)     
+
+         !if (k==1) then
+         !   write(iulog,*)'MDF (debug vars): value of k   = ',k
+         !   write(iulog,*)'                : athlthl(k)   = ',athlthl(k)
+         !   write(iulog,*)'                : athlthlup(k) = ',athlthlup(k)
+         !   write(iulog,*)'                : aup(k)       = ',aup(k)
+         !   write(iulog,*)'                : thl_env(k+1) = ',thl_env(k+1)
+         ! end if
+       end do
+       ! --- MDF 
 
      else
        ddcp = 0._r8
