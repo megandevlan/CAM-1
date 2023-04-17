@@ -210,6 +210,7 @@ module clubb_mf
                            ! +++ MDF 
                            athlthl, athlthlup, athlthldn,                           &
                            aqtqt,   aqtqtup,   aqtqtdn,                             &
+                           uplh,                                                    &
                            ! --- MDF 
                            awthlup, awqtup,                                         & ! output
                            awthldn, awqtdn,                                         & ! output
@@ -292,6 +293,12 @@ module clubb_mf
                                                          upbuoy,  & ! momentum grid
                                                          upent,   & ! momentum grid
                                                          updet
+
+
+     ! +++ MDF 
+     real(r8),dimension(nz,clubb_mf_nup), intent(out) :: uplh          ! momentumgrid
+     ! --- MDF
+
      !
      real(r8),dimension(nz,clubb_mf_nup), intent(out) :: dna,     & ! momentum grid
                                                          dnw,     & ! momentum grid
@@ -569,6 +576,9 @@ module clubb_mf
      upthl = 0._r8
      upthv = 0._r8
      upqt  = 0._r8
+     ! +++ MDF 
+     uplh  = 0._r8
+     ! --- MDF
      upa   = 0._r8
      upmf  = 0._r8
      upu   = 0._r8
@@ -695,6 +705,8 @@ module clubb_mf
                    !(real(i-1, r8))
                    !wtv = wmin + (wmax-wmin) / (real(clubb_mf_nup,r8)) *
                    !real(i,r8)
+
+                   uplh(1,i)  = patchLH(p)*rho_zm(1)
 
                    upw(1,i) = 0.5_r8 * (wlv+wtv)
                    upa(1,i) = patchArea(p)*(0.5_r8 * erf( wtv/(sqrt(2._r8)*sigmaw) ) &

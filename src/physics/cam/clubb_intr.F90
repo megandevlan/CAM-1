@@ -1441,6 +1441,7 @@ end subroutine clubb_init_cnst
       call addfld ( 'edmf_upbuoy'   , (/  'ilev', 'nens' /), 'A', 'm/s2'   , 'Plume updraft buoyancy (EDMF)' )
 ! +++ MDF
       call addfld ( 'edmf_dna'      , (/ 'ilev', 'nens' /), 'A', 'fraction', 'Plume downdraft area fraction (EDMF)' )
+      call addfld ( 'edmf_uplh'     , (/ 'ilev', 'nens' /), 'A', 'mm/s', 'Plume updraft surface QFLX (EDMF)' )
 ! --- MDF
       call addfld ( 'edmf_dnw'      , (/ 'ilev', 'nens' /), 'A', 'm/s'     , 'Plume downdraft vertical velocity (EDMF)' )
       call addfld ( 'edmf_dnthl'    , (/ 'ilev', 'nens' /), 'A', 'K'       , 'Plume downdraft liquid potential temperature (EDMF)' )
@@ -2307,6 +2308,9 @@ end subroutine clubb_init_cnst
                                                               mf_upw_flip,         &
                                                               mf_upmf_flip,        &
                                                               mf_upqt_flip,        &
+                                                              ! +++ MDF
+                                                              mf_uplh_flip,        &
+                                                              ! --- MDF
                                                               mf_upthl_flip,       &
                                                               mf_upthv_flip,       &
                                                               mf_upth_flip,        &
@@ -2319,6 +2323,9 @@ end subroutine clubb_init_cnst
                                                               mf_upw_output,       &
                                                               mf_upmf_output,      &
                                                               mf_upqt_output,      &
+                                                              ! +++ MDF
+                                                              mf_uplh_output,      &
+                                                              ! --- MDF
                                                               mf_upthl_output,     &
                                                               mf_upthv_output,     &
                                                               mf_upth_output,      &
@@ -2391,6 +2398,9 @@ end subroutine clubb_init_cnst
                                               mf_upw,    mf_dnw,       &
                                               mf_upmf,                 &
                                               mf_upqt,   mf_dnqt,      &
+                                              ! +++ MDF 
+                                              mf_uplh,                 &
+                                              ! --- MDF
                                               mf_upthl,  mf_dnthl,     &
                                               mf_upthv,  mf_dnthv,     &
                                               mf_upth,   mf_dnth,      &
@@ -2895,6 +2905,8 @@ end subroutine clubb_init_cnst
    ! +++  MDF
    s_athlthl_output(:,:)    = 0._r8 
    s_aqtqt_output(:,:)      = 0._r8
+   mf_uplh_output(:,:)      = 0._r8
+   mf_uplh_flip(:,:,:)        = 0._r8
    ! --- MDF 
    mf_upa_output(:,:)       = 0._r8
    mf_upw_output(:,:)       = 0._r8
@@ -3445,6 +3457,7 @@ end subroutine clubb_init_cnst
                               ! +++ MDF 
                               s_athlthl,   s_athlthlup, s_athlthldn,                          & ! output - plume diagnostics 
                               s_aqtqt,     s_aqtqtup,   s_aqtqtdn,                            & ! output - plume diagnostics
+                              mf_uplh,                                                        & ! output - plume diagnostics
                               ! --- MDF 
                               s_awthlup,   s_awqtup,                                          & ! output - plume diagnostics
                               s_awthldn,   s_awqtdn,                                          & ! output - plume diagnostics
@@ -3601,6 +3614,12 @@ end subroutine clubb_init_cnst
              flip(pverp-k+1,:clubb_mf_nup) = mf_upqt(k,:clubb_mf_nup)
            end do
 
+           ! +++ MDF
+           do k=1,nlev+1
+             flip(pverp-k+1,:clubb_mf_nup) = mf_uplh(k,:clubb_mf_nup)
+           end do
+           ! --- MDF
+
            do k=1,clubb_mf_nup
              qtu_macmic1( i, 1+pverp*(clubb_mf_nup*(macmic_it-1)+k-1):pverp*(clubb_mf_nup*(macmic_it-1)+k) ) = flip(:pverp,k)
            end do
@@ -3699,6 +3718,12 @@ end subroutine clubb_init_cnst
            do k=1,nlev+1
              flip(pverp-k+1,:clubb_mf_nup) = mf_upqt(k,:clubb_mf_nup)
            end do
+ 
+           ! +++ MDF 
+           do k=1,nlev+1
+             flip(pverp-k+1,:clubb_mf_nup) = mf_uplh(k,:clubb_mf_nup)
+           end do
+           ! --- MDF
 
            do k=1,clubb_mf_nup
              qtu_macmic2( i, 1+pverp*(clubb_mf_nup*(macmic_it-1)+k-1):pverp*(clubb_mf_nup*(macmic_it-1)+k) ) = flip(:pverp,k)
@@ -4085,6 +4110,7 @@ end subroutine clubb_init_cnst
            mf_dnw_flip(i,pverp-k+1,:clubb_mf_nup)       = mf_dnw(k,:clubb_mf_nup)
            ! +++ MDF 
            mf_dna_flip(i,pverp-k+1,:clubb_mf_nup)       = mf_dna(k,:clubb_mf_nup)
+           mf_uplh_flip(i,pverp-k+1,:clubb_mf_nup)      = mf_uplh(k,:clubb_mf_nup)
            ! --- MDF
            mf_dnthl_flip(i,pverp-k+1,:clubb_mf_nup)     = mf_dnthl(k,:clubb_mf_nup)
            mf_dnqt_flip(i,pverp-k+1,:clubb_mf_nup)      = mf_dnqt(k,:clubb_mf_nup)
@@ -4114,6 +4140,7 @@ end subroutine clubb_init_cnst
           mf_dnw_output(i,pverp*(k-1)+1:pverp*k)   = mf_dnw_flip(i,:pverp,k)
           ! +++ MDF 
           mf_dna_output(i,pverp*(k-1)+1:pverp*k)   = mf_dna_flip(i,:pverp,k)
+          mf_uplh_output(i,pverp*(k-1)+1:pverp*k)  = mf_uplh_flip(i,:pverp,k)
           ! --- MDF
           mf_dnthl_output(i,pverp*(k-1)+1:pverp*k) = mf_dnthl_flip(i,:pverp,k)
           mf_dnqt_output(i,pverp*(k-1)+1:pverp*k)  = mf_dnqt_flip(i,:pverp,k)
@@ -4933,6 +4960,7 @@ end subroutine clubb_init_cnst
      call outfld( 'edmf_updet'    , mf_updet_output,           pcols, lchnk )
 ! +++ MDF 
      call outfld( 'edmf_dna'      , mf_dna_output,             pcols, lchnk )
+     call outfld( 'edmf_uplh'     , mf_uplh_output,            pcols, lchnk )
 ! --- MDF
      call outfld( 'edmf_dnw'      , mf_dnw_output,             pcols, lchnk )
      call outfld( 'edmf_dnthl'    , mf_dnthl_output,           pcols, lchnk )
