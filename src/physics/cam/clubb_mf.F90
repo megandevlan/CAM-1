@@ -180,7 +180,7 @@ module clubb_mf
                            ustar,      ths,  wthl,    wqt,       pblh,              & ! input
 
               ! +++ MDF
-                           npft, landfracFromSfc, patchArea,                        & ! input
+                           npft, landfracFromSfc, patchArea, patchLU,               & ! input
                            patchSH, patchLH, patchFV, patchTHS,                     & ! input 
               ! --- MDF
                            wpthlp_env, tke,  tpert,  ztopm1,     rhinv,             & ! input
@@ -276,7 +276,7 @@ module clubb_mf
      !+++ MDF 
      integer, intent(in)                     :: npft
      real(r8), intent(in)                    :: landfracFromSfc
-     real(r8), dimension(npft), intent(in)   :: patchArea, patchSH, &
+     real(r8), dimension(npft), intent(in)   :: patchArea, patchSH, patchLU, &
                                                 patchLH, patchFV, patchTHS 
      !--- MDF 
 
@@ -437,6 +437,13 @@ module clubb_mf
      integer                                :: p, patchPlumes, patchPlumesTotal, pNorm 
      !real(r8)                               :: wthvPatch
      logical                                :: letsDoMF = .false.
+     real(r8)                               :: urbanArea, temp_wgtUrbanSH,       &
+                                               temp_wgtUrbanLH,temp_wgtUrbanTHS, &
+                                               temp_wgtUrbanFV,wgtUrbanSH,       &
+                                               wgtUrbanLH,wgtUrbanTHS,wgtUrbanFV,&
+                                               thisPatchArea,thisPatchSH,        &
+                                               thisPatchLH,thisPatchTHS,thisPatchFV  
+     integer                                :: urbanDone
      ! --- MDF 
 
      !
@@ -620,6 +627,21 @@ module clubb_mf
 
      ! +++ MDF 
      patchPlumesTotal = 0
+     urbanArea        = 0._r8
+     temp_wgtUrbanSH  = 0._r8
+     temp_wgtUrbanLH  = 0._r8
+     temp_wgtUrbanTHS = 0._r8
+     temp_wgtUrbanFV  = 0._r8
+     wgtUrbanSH       = 0._r8
+     wgtUrbanLH       = 0._r8
+     wgtUrbanTHS      = 0._r8
+     wgtUrbanFV       = 0._r8
+     thisPatchArea    = 0._r8
+     thisPatchSH      = 0._r8
+     thisPatchLH      = 0._r8
+     thisPatchTHS     = 0._r8
+     thisPatchFV      = 0._r8
+     urbanDone        = 0 
      ! --- MDF
 
      if (bsort) then
@@ -635,15 +657,60 @@ module clubb_mf
 ! +++ MDF: Big hammer of code mods
     if (do_clubb_mf_patchInit .and. landfracFromSfc==1.0_r8 .and. (.not. is_first_step())) then
 
+       !! Handlue urban uniquely (often very small area fractions split
+       !between walls/roads, but they matter...) 
+       ! So first let's get an urban mean...
+       do p=1,npft
+          if ( patchLU(p)==8._r8) then
+             urbanArea = urbanArea+patchArea(p) 
+             temp_wgtUrbanSH  = temp_wgtUrbanSH  + (patchArea(p)*patchSH(p))
+             temp_wgtUrbanLH  = temp_wgtUrbanLH  + (patchArea(p)*patchLH(p))
+             temp_wgtUrbanTHS = temp_wgtUrbanTHS + (patchArea(p)*patchTHS(p))
+             temp_wgtUrbanFV  = temp_wgtUrbanFV  + (patchArea(p)*patchFV(p))
+          end if 
+       end do 
+       wgtUrbanSH  = temp_wgtUrbanSH/urbanArea
+       wgtUrbanLH  = temp_wgtUrbanLH/urbanArea         
+       wgtUrbanTHS = temp_wgtUrbanTHS/urbanArea
+       wgtUrbanFV  = temp_wgtUrbanFV/urbanArea
+
        ! Loop over surface patches
        do p=1,npft
-          write(iulog,*)'MDF (debug): patch area ',patchArea(p)
+          ! If it's not urban, use the regular patch data 
+          if (patchLU(P) /= 8._r8) then 
+             thisPatchArea = patchArea(p)
+             thisPatchSH   = patchSH(p)
+             thisPatchLH   = patchLH(p)
+             thisPatchTHS  = patchTHS(p)
+             thisPatchFV   = patchFV(p)
+          ! If this is an urban patch and we haven't done urban yet, use urban
+          ! mean values 
+          else if (patchLU(p)==8._r8 .and. urbanDone==0._r8) then 
+             thisPatchArea = urbanArea
+             thisPatchSH   = wgtUrbanSH
+             thisPatchLH   = wgtUrbanLH
+             thisPatchTHS  = wgtUrbanTHS
+             thisPatchFV   = wgtUrbanFV
 
-          wthv = patchSH(p)+zvir*patchTHS(p)*patchLH(p)
-          write(iulog,*)'MDF (debug): Value of wthv_patch = ',wthv
+             urbanDone=1
+          ! If this is an urban patch but we *have* dealt with urban, set the
+          ! patch area to zero so that it's ignored 
+          else if (patchLU(p)==8._r8 .and. urbanDone==1._r8) then
+             thisPatchArea = 0._r8
+             thisPatchSH   = 0._r8
+             thisPatchLH   = 0._r8
+             thisPatchTHS  = 0._r8
+             thisPatchFV   = 0._r8
+          end if 
+
+          !write(iulog,*)'MDF (debug): patch area ',patchArea(p)
+
+          !wthv = patchSH(p)+zvir*patchTHS(p)*patchLH(p)
+          wthv = thisPatchSH+zvir*thisPatchTHS*thisPatchLH
+          !write(iulog,*)'MDF (debug): Value of wthv_patch = ',wthv
 
           ! if surface buoyancy is positive & patch exists, then do mass-flux
-          if ( wthv > 0._r8 .and. patchArea(p) > 0 .and. patchArea(p)<=1 ) then
+          if ( wthv > 0._r8 .and. thisPatchArea > 0 .and. thisPatchArea<=1 ) then
              write(iulog,*)'MDF (debug): You are within first loop (line 583)'
              letsDoMF = .true.
 
@@ -655,10 +722,6 @@ module clubb_mf
             wstar = max( wstarmin, (gravit/thv(1)*wthv*convh)**(1._r8/3._r8) )
             ! TODO: update thv(1) to use patch-specific thv; would patchTHS
             ! suffice? 
-             write(iulog,*)'MDF (debug): wstar = ',wstar
-             write(iulog,*)'MDF (debug): convh = ',convh
-             write(iulog,*)'MDF (debug): thv(1) = ',thv(1)
-             write(iulog,*)'MDF (debug): patchTHS(p) = ',patchTHS(p)
 
             ! --------------------------------------------------------- !
             ! Compute cold pool feedback parameter                      ! 
@@ -672,14 +735,20 @@ module clubb_mf
             ! --------------------------------------------------------- !
 
             ! Number of plumes to initiate on this particular patch
-            patchPlumes = nint(clubb_mf_nup * patchArea(p))
+            patchPlumes = nint(clubb_mf_nup * thisPatchArea)
             write(iulog,*)'MDF: patchPlumes = ',patchPlumes
+            write(iulog,*)'MDF: landunit    = ',patchLU(p)
 
             ! If we still have plumes we can allocate, initiate them over
             ! this surface patch 
             if (patchPlumesTotal < clubb_mf_nup ) then
-               qstar   = patchLH(p)/patchFV(p)
-               thvstar = wthv/patchFV(p)
+               if (patchPlumesTotal+patchPlumes > clubb_mf_nup) then  
+                   patchPlumes = clubb_mf_nup - patchPlumesTotal
+                   write(iulog,*)'MDF : Note - allocating less plumes to stay within range'
+               end if  
+
+               qstar   = thisPatchLH/thisPatchFV
+               thvstar = wthv/thisPatchFV
 
                sigmaw   = alphw * wstar * cpfac
                sigmaqt  = alphqt * abs(qstar) * cpfac
@@ -695,9 +764,9 @@ module clubb_mf
                    write(iulog,*)'MDF: patchPlumes = ',patchPlumes
                    write(iulog,*)'MDF: pNorm = ',pNorm
 
-                   write(iulog,*)'MDF: patchArea    = ',patchArea(p)
-                   write(iulog,*)'MDF: patchSH      = ',patchSH(p)*rho_zm(1)*cpair
-                   write(iulog,*)'MDF: patchLH      = ',patchLH(p)*rho_zm(1)
+                   write(iulog,*)'MDF: patchArea    = ',thisPatchArea
+                   !write(iulog,*)'MDF: patchSH      = ',patchSH(p)*rho_zm(1)*cpair
+                   write(iulog,*)'MDF: patchLH      = ',thisPatchLH*rho_zm(1)
                    wlv = wmin + (wmax-wmin) / (real(patchPlumes,r8)) * (real(pNorm-1, r8))
                    wtv = wmin + (wmax-wmin) / (real(patchPlumes,r8)) * real(pNorm,r8)
 
@@ -706,10 +775,10 @@ module clubb_mf
                    !wtv = wmin + (wmax-wmin) / (real(clubb_mf_nup,r8)) *
                    !real(i,r8)
 
-                   uplh(1,i)  = patchLH(p)*rho_zm(1)
+                   uplh(1,i)  = thisPatchLH*rho_zm(1)
 
                    upw(1,i) = 0.5_r8 * (wlv+wtv)
-                   upa(1,i) = patchArea(p)*(0.5_r8 * erf( wtv/(sqrt(2._r8)*sigmaw) ) &
+                   upa(1,i) = thisPatchArea*(0.5_r8 * erf( wtv/(sqrt(2._r8)*sigmaw) ) &
                             - 0.5_r8 * erf( wlv/(sqrt(2._r8)*sigmaw) ))
 
                    upmf(1,i)= rho_zm(1)*upa(1,i)*upw(1,i)
@@ -719,9 +788,6 @@ module clubb_mf
 
                    upqt(1,i)  = cwqt * upw(1,i) * sigmaqt/sigmaw
                    upthv(1,i) = cwthv * upw(1,i) * sigmathv/sigmaw
-
-                   write(iulog,*)'MDF: upqt(1,i) = ',upqt(1,i) 
-                   write(iulog,*)'MDF: upthv(1,i) = ',upthv(1,i)
 
                    pNorm = pNorm+1._r8
                end do ! plumes per patch 
@@ -1624,12 +1690,12 @@ module clubb_mf
            aqtqtup(k)    = aqtqtup(k)   + upa(k,i)*(upqt(k,i)-qt_env(k+1))*(upqt(k,i)-qt_env(k+1))
            aqtqtdn(k)    = aqtqtdn(k)   + dna(k,i)*(dnqt(k,i)-qt_env(k))*(dnqt(k,i)-qt_env(k))
   
-           if (k==1) then
-              write(iulog,*)'MDF (figure out plume sfc): '
-              write(iulog,*)'   upa(k,i)   = ',upa(k,i)
-              write(iulog,*)'   upqt(k,i)  = ',upqt(k,i)
-              write(iulog,*)'   upthl(k,i) = ',upthl(k,i)
-           end if
+           !if (k==1) then
+           !   write(iulog,*)'MDF (figure out plume sfc): '
+           !   write(iulog,*)'   upa(k,i)   = ',upa(k,i)
+           !   write(iulog,*)'   upqt(k,i)  = ',upqt(k,i)
+           !   write(iulog,*)'   upthl(k,i) = ',upthl(k,i)
+           !end if
 
          end do
          athlthl(k) = athlthlup(k) + athlthldn(k)

@@ -3425,6 +3425,7 @@ end subroutine clubb_init_cnst
                               ! +++ MDF 
                               size(cam_in%lnd_areaPatch(i,:)), cam_in%landfrac(i),            & ! input
                               cam_in%lnd_areaPatch(i,:),                                      & ! input
+                              cam_in%lnd_lunPatch(i,:),                                       & ! input
                               cam_in%lndFlx_shflxPatch(i,:)/(cpair*rho_ds_zm(1)),             & ! input
                               cam_in%lndFlx_lhflxPatch(i,:)/rho_ds_zm(1),                     & ! input
                               cam_in%lnd_fvPatch(i,:),                                        & ! input
@@ -3610,15 +3611,15 @@ end subroutine clubb_init_cnst
              thlu_macmic1( i, 1+pverp*(clubb_mf_nup*(macmic_it-1)+k-1):pverp*(clubb_mf_nup*(macmic_it-1)+k) ) = flip(:pverp,k)
            end do
 
-           do k=1,nlev+1
-             flip(pverp-k+1,:clubb_mf_nup) = mf_upqt(k,:clubb_mf_nup)
-           end do
-
            ! +++ MDF
            do k=1,nlev+1
              flip(pverp-k+1,:clubb_mf_nup) = mf_uplh(k,:clubb_mf_nup)
            end do
            ! --- MDF
+
+           do k=1,nlev+1
+             flip(pverp-k+1,:clubb_mf_nup) = mf_upqt(k,:clubb_mf_nup)
+           end do
 
            do k=1,clubb_mf_nup
              qtu_macmic1( i, 1+pverp*(clubb_mf_nup*(macmic_it-1)+k-1):pverp*(clubb_mf_nup*(macmic_it-1)+k) ) = flip(:pverp,k)
@@ -3715,16 +3716,16 @@ end subroutine clubb_init_cnst
              thlu_macmic2( i, 1+pverp*(clubb_mf_nup*(macmic_it-1)+k-1):pverp*(clubb_mf_nup*(macmic_it-1)+k) ) = flip(:pverp,k)
            end do
 
-           do k=1,nlev+1
-             flip(pverp-k+1,:clubb_mf_nup) = mf_upqt(k,:clubb_mf_nup)
-           end do
- 
            ! +++ MDF 
            do k=1,nlev+1
              flip(pverp-k+1,:clubb_mf_nup) = mf_uplh(k,:clubb_mf_nup)
            end do
            ! --- MDF
 
+           do k=1,nlev+1
+             flip(pverp-k+1,:clubb_mf_nup) = mf_upqt(k,:clubb_mf_nup)
+           end do
+ 
            do k=1,clubb_mf_nup
              qtu_macmic2( i, 1+pverp*(clubb_mf_nup*(macmic_it-1)+k-1):pverp*(clubb_mf_nup*(macmic_it-1)+k) ) = flip(:pverp,k)
            end do

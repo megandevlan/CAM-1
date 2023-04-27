@@ -126,6 +126,7 @@ module camsrfexch
      real(r8), pointer, dimension(:,:) :: lnd_fvPatch       ! patch states 
      real(r8), pointer, dimension(:,:) :: lnd_areaPatch     ! patch states 
      real(r8), pointer, dimension(:,:) :: lnd_tsPatch       ! patch states 
+     real(r8), pointer, dimension(:,:) :: lnd_lunPatch     ! patch states 
 !--- MDF
   end type cam_in_t    
 
@@ -180,6 +181,7 @@ CONTAINS
        nullify(cam_in(c)%lnd_fvPatch)
        nullify(cam_in(c)%lnd_areaPatch)
        nullify(cam_in(c)%lnd_tsPatch)
+       nullify(cam_in(c)%lnd_lunPatch)
        !--- MDF
     enddo  
     do c = begchunk,endchunk 
@@ -244,6 +246,10 @@ CONTAINS
        allocate(cam_in(c)%lnd_tsPatch(pcols,maxPatch), stat=ierror)
        if ( ierror /= 0 ) call endrun(sub//': allocation error patch data')
        write(iulog,*)'MDF: This is the value of cam_in%lnd_tsPatch:',cam_in(c)%lnd_tsPatch(pcols,maxPatch)
+
+       allocate(cam_in(c)%lnd_lunPatch(pcols,maxPatch), stat=ierror)
+       if ( ierror /= 0 ) call endrun(sub//': allocation error patch data')
+       write(iulog,*)'MDF: This is the value of cam_in%lnd_lunPatch:',cam_in(c)%lnd_lunPatch(pcols,maxPatch)
     end do
     !--- MDF
 
@@ -302,6 +308,7 @@ CONTAINS
        cam_in(c)%lnd_fvPatch(:,:)       = 9999._r8
        cam_in(c)%lnd_areaPatch(:,:)     = 9999._r8
        cam_in(c)%lnd_tsPatch(:,:)       = 9999._r8
+       cam_in(c)%lnd_lunPatch(:,:)      = 9999._r8
        !--- MDF
     end do
 
@@ -462,7 +469,11 @@ CONTAINS
              nullify(cam_in(c)%lnd_tsPatch)
           end if
 
-          write(iulog,*)'MDF: deallocate section okay'
+          if(associated(cam_in(c)%lnd_lunPatch)) then
+             deallocate(cam_in(c)%lnd_lunPatch)
+             nullify(cam_in(c)%lnd_lunPatch)
+          end if
+
           !--- MDF           
        enddo
 

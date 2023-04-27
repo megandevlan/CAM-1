@@ -270,6 +270,7 @@ contains
     call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_fvPatch',    ungridded_lbound=1,ungridded_ubound=maxPatch)
     call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_areaPatch',  ungridded_lbound=1,ungridded_ubound=maxPatch)
     call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_tsPatch',    ungridded_lbound=1,ungridded_ubound=maxPatch)
+    call fldlist_add(fldsToAtm_num, fldsToAtm, 'Sl_lunPatch',   ungridded_lbound=1,ungridded_ubound=maxPatch)
 
     !--- MDF 
 
@@ -704,6 +705,24 @@ contains
           end if
        end do
     end if
+
+    call state_getfldptr(importState, 'Sl_lunPatch', fldptr2d=fldptr2d, exists=exists, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    write(iulog,*)'MDF: The value of exists (Sl_lunPatch) is: ',exists
+    if (exists) then
+       g = 1
+       do c = begchunk,endchunk
+          if ( associated(cam_in(c)%lnd_lunPatch) ) then
+             do i = 1,get_ncols_p(c)
+                do n = 1, size(fldptr2d, dim=1)
+                   cam_in(c)%lnd_lunPatch(i,n) = fldptr2d(n,g)
+                end do
+                g = g + 1
+             end do
+          end if
+       end do
+    end if
+
 
     ! --- MDF 
 
