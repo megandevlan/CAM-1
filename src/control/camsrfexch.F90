@@ -155,9 +155,6 @@ CONTAINS
     character(len=*), parameter :: sub = 'hub2atm_alloc'
     !----------------------------------------------------------------------- 
 
-!+++ MDF
-     write(iulog,*)'MDF:  in srfxch, value of maxPatch is: ',maxPatch
-!--- MDF
 
     if ( .not. phys_grid_initialized() ) call endrun(sub//": phys_grid not called yet")
     allocate (cam_in(begchunk:endchunk), stat=ierror)
@@ -229,27 +226,27 @@ CONTAINS
     do c = begchunk,endchunk
        allocate(cam_in(c)%lndFlx_shflxPatch(pcols,maxPatch), stat=ierror)
        if ( ierror /= 0 ) call endrun(sub//': allocation error patch data')
-       write(iulog,*)'MDF: This is the value of cam_in%lndFlx_shflxPatch:',cam_in(c)%lndFlx_shflxPatch(pcols,maxPatch)
+       !write(iulog,*)'MDF: This is the value of cam_in%lndFlx_shflxPatch:',cam_in(c)%lndFlx_shflxPatch(pcols,maxPatch)
 
        allocate(cam_in(c)%lndFlx_lhflxPatch(pcols,maxPatch), stat=ierror)
        if ( ierror /= 0 ) call endrun(sub//': allocation error patch data')
-       write(iulog,*)'MDF: This is the value of cam_in%lndFlx_lhflxPatch:',cam_in(c)%lndFlx_lhflxPatch(pcols,maxPatch)
+       !write(iulog,*)'MDF: This is the value of cam_in%lndFlx_lhflxPatch:',cam_in(c)%lndFlx_lhflxPatch(pcols,maxPatch)
 
        allocate(cam_in(c)%lnd_fvPatch(pcols,maxPatch), stat=ierror)
        if ( ierror /= 0 ) call endrun(sub//': allocation error patch data')
-       write(iulog,*)'MDF: This is the value of cam_in%lnd_fvPatch:',cam_in(c)%lnd_fvPatch(pcols,maxPatch)
+       !write(iulog,*)'MDF: This is the value of cam_in%lnd_fvPatch:',cam_in(c)%lnd_fvPatch(pcols,maxPatch)
 
        allocate(cam_in(c)%lnd_areaPatch(pcols,maxPatch), stat=ierror)
        if ( ierror /= 0 ) call endrun(sub//': allocation error patch data')
-       write(iulog,*)'MDF: This is the value of cam_in%lnd_areaPatch:',cam_in(c)%lnd_areaPatch(pcols,maxPatch)
+       !write(iulog,*)'MDF: This is the value of cam_in%lnd_areaPatch:',cam_in(c)%lnd_areaPatch(pcols,maxPatch)
 
        allocate(cam_in(c)%lnd_tsPatch(pcols,maxPatch), stat=ierror)
        if ( ierror /= 0 ) call endrun(sub//': allocation error patch data')
-       write(iulog,*)'MDF: This is the value of cam_in%lnd_tsPatch:',cam_in(c)%lnd_tsPatch(pcols,maxPatch)
+       !write(iulog,*)'MDF: This is the value of cam_in%lnd_tsPatch:',cam_in(c)%lnd_tsPatch(pcols,maxPatch)
 
        allocate(cam_in(c)%lnd_lunPatch(pcols,maxPatch), stat=ierror)
        if ( ierror /= 0 ) call endrun(sub//': allocation error patch data')
-       write(iulog,*)'MDF: This is the value of cam_in%lnd_lunPatch:',cam_in(c)%lnd_lunPatch(pcols,maxPatch)
+       !write(iulog,*)'MDF: This is the value of cam_in%lnd_lunPatch:',cam_in(c)%lnd_lunPatch(pcols,maxPatch)
     end do
     !--- MDF
 

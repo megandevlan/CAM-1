@@ -622,7 +622,7 @@ contains
     !+++ MDF 
     call state_getfldptr(importState, 'Fl_shflxPatch', fldptr2d=fldptr2d, exists=exists, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    write(iulog,*)'MDF: The value of exists (Fl_shflxPatch) is: ',exists
+    !write(iulog,*)'MDF: The value of exists (Fl_shflxPatch) is: ',exists
     if (exists) then
        g = 1
        do c = begchunk,endchunk
@@ -640,7 +640,7 @@ contains
 
     call state_getfldptr(importState, 'Fl_lhflxPatch', fldptr2d=fldptr2d, exists=exists, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    write(iulog,*)'MDF: The value of exists (Fl_lhflxPatch) is: ',exists
+    !write(iulog,*)'MDF: The value of exists (Fl_lhflxPatch) is: ',exists
     if (exists) then
        g = 1
        do c = begchunk,endchunk
@@ -657,7 +657,7 @@ contains
 
     call state_getfldptr(importState, 'Sl_fvPatch', fldptr2d=fldptr2d, exists=exists, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    write(iulog,*)'MDF: The value of exists (Sl_fvPatch) is: ',exists
+    !write(iulog,*)'MDF: The value of exists (Sl_fvPatch) is: ',exists
     if (exists) then
        g = 1
        do c = begchunk,endchunk
@@ -674,7 +674,7 @@ contains
 
     call state_getfldptr(importState, 'Sl_areaPatch', fldptr2d=fldptr2d, exists=exists, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    write(iulog,*)'MDF: The value of exists (Sl_areaPatch) is: ',exists
+    !write(iulog,*)'MDF: The value of exists (Sl_areaPatch) is: ',exists
     if (exists) then
        g = 1
        do c = begchunk,endchunk
@@ -691,7 +691,7 @@ contains
 
     call state_getfldptr(importState, 'Sl_tsPatch', fldptr2d=fldptr2d, exists=exists, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    write(iulog,*)'MDF: The value of exists (Sl_tsPatch) is: ',exists
+    !write(iulog,*)'MDF: The value of exists (Sl_tsPatch) is: ',exists
     if (exists) then
        g = 1
        do c = begchunk,endchunk
@@ -708,7 +708,7 @@ contains
 
     call state_getfldptr(importState, 'Sl_lunPatch', fldptr2d=fldptr2d, exists=exists, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    write(iulog,*)'MDF: The value of exists (Sl_lunPatch) is: ',exists
+    !write(iulog,*)'MDF: The value of exists (Sl_lunPatch) is: ',exists
     if (exists) then
        g = 1
        do c = begchunk,endchunk
