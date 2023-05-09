@@ -791,7 +791,7 @@ module clubb_mf
             if (patchPlumesTotal < clubb_mf_nup ) then
                if (patchPlumesTotal+patchPlumes > clubb_mf_nup) then  
                    patchPlumes = clubb_mf_nup - patchPlumesTotal
-                   write(iulog,*)'MDF : Note - allocating less plumes to stay within range'
+                   !write(iulog,*)'MDF : Note - allocating less plumes to stay within range'
                end if  
 
                qstar   = thisPatchLH/thisPatchFV
@@ -807,13 +807,13 @@ module clubb_mf
                pNorm = 1._r8
 
                do i=patchPlumesTotal+1, patchPlumesTotal+patchPlumes
-                   write(iulog,*)'MDF: initiate plume i over patch p',i,p
-                   write(iulog,*)'MDF: patchPlumes = ',patchPlumes
-                   write(iulog,*)'MDF: pNorm = ',pNorm
+                   !write(iulog,*)'MDF: initiate plume i over patch p',i,p
+                   !write(iulog,*)'MDF: patchPlumes = ',patchPlumes
+                   !write(iulog,*)'MDF: pNorm = ',pNorm
 
-                   write(iulog,*)'MDF: patchArea    = ',thisPatchArea
+                   !write(iulog,*)'MDF: patchArea    = ',thisPatchArea
                    !write(iulog,*)'MDF: patchSH      = ',patchSH(p)*rho_zm(1)*cpair
-                   write(iulog,*)'MDF: patchLH      = ',thisPatchLH*rho_zm(1)
+                   !write(iulog,*)'MDF: patchLH      = ',thisPatchLH*rho_zm(1)
                    wlv = wmin + (wmax-wmin) / (real(patchPlumes,r8)) * (real(pNorm-1, r8))
                    wtv = wmin + (wmax-wmin) / (real(patchPlumes,r8)) * real(pNorm,r8)
 
@@ -842,7 +842,7 @@ module clubb_mf
 
             ! Track how many patch-based plumes we've initiated so far 
             patchPlumesTotal = patchPlumesTotal + patchPlumes
-            write(iulog,*)'MDF: patchPlumesTotal = ',patchPlumesTotal
+            !write(iulog,*)'MDF: patchPlumesTotal = ',patchPlumesTotal
 
             facqtu=1._r8
             facthvu=1._r8
@@ -850,7 +850,7 @@ module clubb_mf
           end if  ! if wthv>0
        end do     ! loop over every patch
 
-       write(iulog,*)'MDF: patchPlumesTotal after all patch loops = ',patchPlumesTotal
+       !write(iulog,*)'MDF: patchPlumesTotal after all patch loops = ',patchPlumesTotal
 
     else
        ! ------------------------------------------------- !
