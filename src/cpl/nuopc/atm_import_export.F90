@@ -91,7 +91,7 @@ contains
     logical                :: flds_co2c      ! use case
     integer                :: ndep_nflds, megan_nflds, emis_nflds
     !+++ MDF
-    integer, parameter :: maxPatch = 78 ! Max number of surface tiles to fill 
+    integer, parameter :: maxPatch = 97 ! Max number of surface tiles to fill 
     !--- MDF
     character(len=128)     :: fldname
     character(len=*), parameter :: subname='(atm_import_export:advertise_fields)'

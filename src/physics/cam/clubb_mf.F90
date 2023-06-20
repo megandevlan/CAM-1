@@ -659,6 +659,9 @@ module clubb_mf
 
 
 ! +++ MDF: Big hammer of code mods
+    ! Defining this here to avoid any errors
+    !cpfac = 1._r8
+ 
     if (do_clubb_mf_patchInit .and. landfracFromSfc==1.0_r8 .and. (.not. is_first_step())) then
 
        !! Handlue urban uniquely (often very small area fractions split

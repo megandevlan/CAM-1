@@ -150,7 +150,7 @@ CONTAINS
     integer :: c        ! chunk index
     integer :: ierror   ! Error code
     !+++ MDF 
-    integer, parameter :: maxPatch = 78 ! Max number of surface tiles to fill 
+    integer, parameter :: maxPatch = 97 ! Max number of surface tiles to fill 
     !--- MDF
     character(len=*), parameter :: sub = 'hub2atm_alloc'
     !----------------------------------------------------------------------- 
