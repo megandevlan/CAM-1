@@ -485,16 +485,9 @@ module clubb_intr
       call pbuf_add_field('edmf_thlflx_macmic' ,'physpkg',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps/), mf_wpthlp_macmic_idx)
       call pbuf_add_field('edmf_qtflx_macmic'  ,'physpkg',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps/), mf_wprtp_macmic_idx)
       call pbuf_add_field('edmf_thvflx_macmic' ,'physpkg',  dtype_r8, (/pcols,pverp*cld_macmic_num_steps/), mf_wpthvp_macmic_idx)
-!+++ARH
-      !call pbuf_add_field('ZTOPMN'             ,'global' ,  dtype_r8, (/clubb_mf_up_ndt,pcols/), ztopmn_idx)
-      !call pbuf_add_field('ZTOPMA'             ,'global' ,  dtype_r8, (/pcols/), ztopma_idx)
-      !call pbuf_add_field('ZTOP_MACMIC'        ,'physpkg',  dtype_r8, (/pcols/), ztopm1_macmic_idx)
       call pbuf_add_field('ZTOPMN'             ,'global' ,  dtype_r8, (/clubb_mf_up_ndt,pcols,clubb_mf_nup/), ztopmn_idx)
       call pbuf_add_field('ZTOPMA'             ,'global' ,  dtype_r8, (/pcols,clubb_mf_nup/), ztopma_idx)
       call pbuf_add_field('ZTOP_MACMIC'        ,'physpkg',  dtype_r8, (/pcols,clubb_mf_nup/), ztopm1_macmic_idx)
-      !call pbuf_add_field('DDCP'               ,'global' ,  dtype_r8, (/pcols/), ddcp_idx)
-      !call pbuf_add_field('DDCP_MACMIC'        ,'physpkg',  dtype_r8, (/pcols/), ddcp_macmic_idx)
-      !call pbuf_add_field('DDCPMN'             ,'global' ,  dtype_r8, (/clubb_mf_cp_ndt,pcols/), ddcpmn_idx)
       call pbuf_add_field('DDCP'               ,'global' ,  dtype_r8, (/pcols,clubb_mf_nup/), ddcp_idx)
       call pbuf_add_field('DDCP_MACMIC'        ,'physpkg',  dtype_r8, (/pcols,clubb_mf_nup/), ddcp_macmic_idx)
       call pbuf_add_field('DDCPMN'             ,'global' ,  dtype_r8, (/clubb_mf_cp_ndt,pcols,clubb_mf_nup/), ddcpmn_idx)
@@ -2205,20 +2198,12 @@ end subroutine clubb_init_cnst
    real(r8),pointer :: prec_sh(:)   ! total precipitation from MF
    real(r8),pointer :: snow_sh(:)   ! snow from MF
 
-!+++ARH
-   !real(r8), pointer :: ztopmn(:,:)
-   !real(r8), pointer :: ztopma(:)
-   !real(r8), pointer :: ztopm1_macmic(:)
    real(r8), pointer :: ztopmn(:,:,:)
    real(r8), pointer :: ztopma(:,:)
    real(r8), pointer :: ztopm1_macmic(:,:)
-   !real(r8), pointer :: ddcp(:)
-   !real(r8), pointer :: ddcp_macmic(:)
-   !real(r8), pointer :: ddcpmn(:,:)
    real(r8), pointer :: ddcp(:,:)
    real(r8), pointer :: ddcp_macmic(:,:)
    real(r8), pointer :: ddcpmn(:,:,:)
-!---ARH
 
    real(r8), pointer :: cbm1(:)
    real(r8), pointer :: cbm1_macmic(:)
@@ -2435,13 +2420,9 @@ end subroutine clubb_init_cnst
 
    logical                              :: cfllim
 
-!+++ARH
-   !real(r8)                             :: mf_ztop,    mf_ztop_nadv,   &
-   !                                        mf_ztopm1,  mf_ztopm1_nadv, &
    real(r8)                             :: mf_precc_nadv, mf_snow_nadv,&
-                                           !mf_L0,      mf_L0_nadv,     &
-                                           !mf_ddcp,    mf_ddcp_nadv,   &
                                            mf_cbm1,    mf_cbm1_nadv
+
    real(r8), dimension(clubb_mf_nup)    :: mf_ztop,    mf_ztop_nadv,   &
                                            mf_ztopm1,  mf_ztopm1_nadv, &
                                            mf_L0,      mf_L0_nadv,     &
@@ -3425,16 +3406,8 @@ end subroutine clubb_init_cnst
              thv_ds_zm = zt2zm_api( thv_ds_zt  )
            end if
 
-!+++ARH
-           !mf_ztopm1 = ztopma(i) 
            mf_ztopm1(:) = ztopma(i,:)
-           !mf_ddcp = ddcp(i)
            mf_ddcp(:) = ddcp(i,:)
-write(iam+1000,*) '----------------------------'
-write(iam+1000,*) 'nstep: ', get_nstep(), ' macmic_it: ', macmic_it, ' nadv: ', t
-write(iam+1000,*) 'ztopm1: ', mf_ztopm1(:)
-write(iam+1000,*) 'ddcp: ', mf_ddcp(:)
-!---ARH
            mf_cbm1 = cbm1(i)
 
            rhinv = 0._r8
@@ -3595,12 +3568,10 @@ write(iam+1000,*) 'ddcp: ', mf_ddcp(:)
            max_cfl_nadv = MAX(max_cfl,max_cfl_nadv)
 !+++ARH
          if (t==1) then
-!+++ARH
-           !ztop_macmic1(i,macmic_it) = mf_ztopm1
+
            ztop_macmic1(i,macmic_it) = MAXVAL(mf_ztopm1)
-           !ddcp_macmic1(i,macmic_it) = mf_ddcp
            ddcp_macmic1(i,macmic_it) = MAXVAL(mf_ddcp)
-!---ARH
+
            do k=1,nlev+1
              flip(pverp-k+1,:clubb_mf_nup) = mf_upw(k,:clubb_mf_nup)
            end do
@@ -3703,12 +3674,9 @@ write(iam+1000,*) 'ddcp: ', mf_ddcp(:)
 
          else if (t==2) then
 
-!+++ARH
-           !ztop_macmic2(i,macmic_it) = mf_ztopm1
            ztop_macmic2(i,macmic_it) = MAXVAL(mf_ztopm1)
-           !ddcp_macmic2(i,macmic_it) = mf_ddcp
            ddcp_macmic2(i,macmic_it) = MAXVAL(mf_ddcp)
-!---ARH
+
            do k=1,nlev+1
              flip(pverp-k+1,:clubb_mf_nup) = mf_upw(k,:clubb_mf_nup)
            end do
@@ -3939,14 +3907,6 @@ write(iam+1000,*) 'ddcp: ', mf_ddcp(:)
           if (clubb_mf_up_ndt == 1) then
             ztopma(i,:) = ztopm1_macmic(i,:)/REAL(cld_macmic_num_steps)
           else
-!+++ARH
-            !ztopmn(2:clubb_mf_up_ndt,i) = ztopmn(1:clubb_mf_up_ndt-1,i)
-            !ztopmn(1,i) = ztopm1_macmic(i)/REAL(cld_macmic_num_steps)
-            !ztopma(i) = 0._r8
-            !do t=1,clubb_mf_up_ndt
-            !  ztopma(i) = ztopma(i) + ztopmn(t,i)
-            !end do
-            !ztopma(i) = ztopma(i)/REAL(clubb_mf_up_ndt)
             ztopmn(2:clubb_mf_up_ndt,i,:) = ztopmn(1:clubb_mf_up_ndt-1,i,:)
             ztopmn(1,i,:) = ztopm1_macmic(i,:)/REAL(cld_macmic_num_steps)
             ztopma(i,:) = 0._r8
@@ -3954,20 +3914,11 @@ write(iam+1000,*) 'ddcp: ', mf_ddcp(:)
               ztopma(i,:) = ztopma(i,:) + ztopmn(t,i,:)
             end do
             ztopma(i,:) = ztopma(i,:)/REAL(clubb_mf_up_ndt)
-!---ARH
           end if
 
           if (clubb_mf_cp_ndt == 1) then
             ddcp(i,:) = ddcp_macmic(i,:)/REAL(cld_macmic_num_steps)
           else
-!+++ARH
-            !ddcpmn(2:clubb_mf_cp_ndt,i) = ddcpmn(1:clubb_mf_cp_ndt-1,i)
-            !ddcpmn(1,i) = ddcp_macmic(i)/REAL(cld_macmic_num_steps) 
-            !ddcp(i) = 0._r8
-            !do t=1,clubb_mf_cp_ndt
-            !  ddcp(i) = ddcp(i) + ddcpmn(t,i)
-            !end do
-            !ddcp(i) = ddcp(i)/REAL(clubb_mf_cp_ndt)
             ddcpmn(2:clubb_mf_cp_ndt,i,:) = ddcpmn(1:clubb_mf_cp_ndt-1,i,:)
             ddcpmn(1,i,:) = ddcp_macmic(i,:)/REAL(cld_macmic_num_steps)
             ddcp(i,:) = 0._r8
@@ -3975,7 +3926,6 @@ write(iam+1000,*) 'ddcp: ', mf_ddcp(:)
               ddcp(i,:) = ddcp(i,:) + ddcpmn(t,i,:)
             end do
             ddcp(i,:) = ddcp(i,:)/REAL(clubb_mf_cp_ndt)
-!---ARH
           end if
 
           ddcp(i,:) = clubb_mf_ddalph*ddcp(i,:)

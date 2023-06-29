@@ -290,11 +290,8 @@ module clubb_mf
                                                 patchLH, patchFV, patchTHS 
      !--- MDF 
 
-!+++ARH
-     !real(r8), intent(inout)             :: ztopm1,ddcp,cbm1
      real(r8), intent(inout)             :: cbm1
      real(r8),dimension(clubb_mf_nup),intent(inout) :: ztopm1, ddcp
-!---ARH
 
      real(r8),dimension(nz,clubb_mf_nup), intent(out) :: upa,     & ! momentum grid
                                                          upw,     & ! momentum grid
