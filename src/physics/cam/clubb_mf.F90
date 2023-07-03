@@ -56,6 +56,7 @@ module clubb_mf
   real(r8) :: clubb_mf_ddexp   = 0._r8
   integer  :: clubb_mf_up_ndt  = 1
   integer  :: clubb_mf_cp_ndt  = 1
+  integer  :: clubb_mf_kseed   = 1
   integer, protected :: clubb_mf_nup     = 0
   logical, protected :: do_clubb_mf = .false.
   logical, protected :: do_clubb_mf_diag = .false.
@@ -99,7 +100,7 @@ module clubb_mf
                            ! --- MDF
                            clubb_mf_fdd, do_clubb_mf_coldpool, clubb_mf_ddalph, clubb_mf_ddbeta, clubb_mf_pwfac, do_clubb_mf_ustar, &
                            clubb_mf_ddexp, do_clubb_mf_mixd, clubb_mf_up_ndt, clubb_mf_cp_ndt, &
-                           do_clubb_mf_coldpool_init, do_clubb_mf_coldpool_perplume, do_clubb_mf_lscale_perplume
+                           do_clubb_mf_coldpool_init, do_clubb_mf_coldpool_perplume, do_clubb_mf_lscale_perplume, clubb_mf_kseed
 
     if (masterproc) then
       open( newunit=iunit, file=trim(nlfile), status='old' )
@@ -155,6 +156,8 @@ module clubb_mf
     if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_mf_up_ndt")
     call mpi_bcast(clubb_mf_cp_ndt, 1, mpi_integer, mstrid, mpicom, ierr)
     if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_mf_cp_ndt")
+    call mpi_bcast(clubb_mf_kseed, 1, mpi_integer, mstrid, mpicom, ierr)
+    if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_mf_kseed")
     call mpi_bcast(do_clubb_mf_ustar, 1, mpi_logical, mstrid, mpicom, ierr)
     if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: do_clubb_mf_ustar")
     call mpi_bcast(clubb_mf_ddexp,  1, mpi_real8,   mstrid, mpicom, ierr)
@@ -518,6 +521,9 @@ module clubb_mf
      !
      ! limiter on cold pool effects
      real(r8),parameter                   :: max_cpfac = 5._r8
+     !
+     ! max limiter on cold pool init effects
+     real(r8),parameter                   :: max_cpinit = 0.5_r8
 
      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
      !!!!!!!!!!!!!!!!!!!!!! BEGIN CODE !!!!!!!!!!!!!!!!!!!!!!!
@@ -815,9 +821,9 @@ module clubb_mf
                do i=patchPlumesTotal+1, patchPlumesTotal+patchPlumes
 
                    if (do_clubb_mf_coldpool_init) then
-                     sigmaw   = alphw * wstar * cpfac(i)
-                     sigmaqt  = alphqt * abs(qstar) * cpfac(i)
-                     sigmathv = alphthv * abs(thvstar) * cpfac(i)
+                     sigmaw   = alphw * wstar * (1._r8 + max_cpinit*cpfac(i)/max_cpfac)
+                     sigmaqt  = alphqt * abs(qstar) * (1._r8 + max_cpinit*cpfac(i)/max_cpfac)
+                     sigmathv = alphthv * abs(thvstar) * (1._r8 + max_cpinit*cpfac(i)/max_cpfac)
                    else
                      sigmaw   = alphw * wstar
                      sigmaqt  = alphqt * abs(qstar)
@@ -923,9 +929,9 @@ module clubb_mf
           do i=1,clubb_mf_nup
 
              if (do_clubb_mf_coldpool_init) then
-               sigmaw   = alphw * wstar * cpfac(i)
-               sigmaqt  = alphqt * abs(qstar) * cpfac(i)
-               sigmathv = alphthv * abs(thvstar) * cpfac(i)
+               sigmaw   = alphw * wstar * (1._r8 + max_cpinit*cpfac(i)/max_cpfac)
+               sigmaqt  = alphqt * abs(qstar) * (1._r8 + max_cpinit*cpfac(i)/max_cpfac)
+               sigmathv = alphthv * abs(thvstar) * (1._r8 + max_cpinit*cpfac(i)/max_cpfac)
              else
                sigmaw   = alphw * wstar
                sigmaqt  = alphqt * abs(qstar)
@@ -1043,7 +1049,8 @@ module clubb_mf
 !---ARH
   
        ! get poisson, P(dz/L0)
-       call poisson( nz, clubb_mf_nup, entf, enti, u(2:5))
+       !call poisson( nz, clubb_mf_nup, entf, enti, u(2:5))
+       call poisson( nz, clubb_mf_nup, entf, enti, u(clubb_mf_kseed+1:clubb_mf_kseed+4))
 
        ! --------------------------------------------------------- !
        ! Main upward sweep to compute updraft properties           ! 

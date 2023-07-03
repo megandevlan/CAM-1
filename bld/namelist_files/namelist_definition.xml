@@ -4018,6 +4018,12 @@ Real: number of time-steps for running average of cold pool effects
 Default: 1
 </entry>
 
+<entry id="clubb_mf_kseed" type="integer" category="conv"
+       group="clubb_mf_nl" valid_values="" >
+Real: level position of state used to seed the random number generator
+Default: 1
+</entry>
+
 <!-- CARMA Sectional Microphysics -->
 
 <entry id="carma_model" type="char*32" category="carma"

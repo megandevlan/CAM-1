@@ -1966,7 +1966,7 @@
 <do_clubb_mf_mixd                  > .false. </do_clubb_mf_mixd>
 <clubb_mf_up_ndt                   > 1       </clubb_mf_up_ndt>
 <clubb_mf_cp_ndt                   > 1       </clubb_mf_cp_ndt>
-
+<clubb_mf_kseed                    > 1       </clubb_mf_kseed>
 
 <!-- Microphysics scheme -->
 <micro_mg_do_hail                       > .false. </micro_mg_do_hail>
