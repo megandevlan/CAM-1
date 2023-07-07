@@ -3945,6 +3945,12 @@ Real: limiter on entrainmnet length scale + threshold to diable TKE enhanced ent
 Default: 10.e3
 </entry>
 
+<entry id="do_clubb_mf_lscale_perplume" type="logical" category="conv"
+       group="clubb_mf_nl" valid_values="" >
+If .true. set unique entrainment length scale for each plume member
+Default: .false.
+</entry>
+
 <entry id="clubb_mf_fdd" type="real" category="conv"
        group="clubb_mf_nl" valid_values="" >
 Fraction of autoconversion partitioned to downdrafts (zero means no downdrafts)
@@ -3953,6 +3959,18 @@ Default: 0.0
 <entry id="do_clubb_mf_coldpool" type="logical" category="conv"
        group="clubb_mf_nl" valid_values="" >
 If .true. turn on cold pool feedback parameterizations
+Default: .false.
+</entry>
+
+<entry id="do_clubb_mf_coldpool_init" type="logical" category="conv"
+       group="clubb_mf_nl" valid_values="" >
+If .true. let cold pool feedback impact plume intialization
+Default: .false.
+</entry>
+
+<entry id="do_clubb_mf_coldpool_perplume" type="logical" category="conv"
+       group="clubb_mf_nl" valid_values="" >
+If .true. set cold pool feedback to unique to each plume member
 Default: .false.
 </entry>
 
@@ -3997,6 +4015,12 @@ Default: 1
 <entry id="clubb_mf_cp_ndt" type="integer" category="conv"
        group="clubb_mf_nl" valid_values="" >
 Real: number of time-steps for running average of cold pool effects
+Default: 1
+</entry>
+
+<entry id="clubb_mf_kseed" type="integer" category="conv"
+       group="clubb_mf_nl" valid_values="" >
+Real: level position of state used to seed the random number generator
 Default: 1
 </entry>
 
