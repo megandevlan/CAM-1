@@ -673,14 +673,18 @@ module clubb_mf
        !! TODO: Generalize more - need low/medium/high density urban to be
        !captured individually 
 
+       !write(iulog,*)'MDF: Value of npft = ',npft
+       write(iulog,*)'MDF: All the values of patchArea = ',patchArea
+
        do p=1,npft
-          if ( patchLU(p)==8._r8) then
-             urbanArea = urbanArea+patchArea(p) 
-             temp_wgtUrbanSH  = temp_wgtUrbanSH  + (patchArea(p)*patchSH(p))
-             temp_wgtUrbanLH  = temp_wgtUrbanLH  + (patchArea(p)*patchLH(p))
-             temp_wgtUrbanTHS = temp_wgtUrbanTHS + (patchArea(p)*patchTHS(p))
-             temp_wgtUrbanFV  = temp_wgtUrbanFV  + (patchArea(p)*patchFV(p))
-          else if (patchLU(p)/=8._r8 .and. patchArea(p) > 0 .and. patchArea(p)<=1) then
+          !if ( patchLU(p)==8._r8) then
+          !   write(iulog,*)'MDF: ...There is an urban patch here...'
+          !   urbanArea = urbanArea+patchArea(p) 
+          !   temp_wgtUrbanSH  = temp_wgtUrbanSH  + (patchArea(p)*patchSH(p))
+          !   temp_wgtUrbanLH  = temp_wgtUrbanLH  + (patchArea(p)*patchLH(p))
+          !   temp_wgtUrbanTHS = temp_wgtUrbanTHS + (patchArea(p)*patchTHS(p))
+          !   temp_wgtUrbanFV  = temp_wgtUrbanFV  + (patchArea(p)*patchFV(p))
+          if (patchArea(p) > 0 .and. patchArea(p)<=1) then
              write(iulog,*)'MDF: Adding this many plumes to patchPlumesTemp: ',floor(patchArea(p)*clubb_mf_nup)
              patchPlumesTemp = patchPlumesTemp + floor(patchArea(p)*clubb_mf_nup)
              write(iulog,*)'MDF: patchPlumesTemp = ',patchPlumesTemp,' after iPFT = ',p
@@ -690,68 +694,38 @@ module clubb_mf
              endif 
           end if 
        end do 
-       wgtUrbanSH  = temp_wgtUrbanSH/urbanArea
-       wgtUrbanLH  = temp_wgtUrbanLH/urbanArea         
-       wgtUrbanTHS = temp_wgtUrbanTHS/urbanArea
-       wgtUrbanFV  = temp_wgtUrbanFV/urbanArea
+       !wgtUrbanSH  = temp_wgtUrbanSH/urbanArea
+       !wgtUrbanLH  = temp_wgtUrbanLH/urbanArea         
+       !wgtUrbanTHS = temp_wgtUrbanTHS/urbanArea
+       !wgtUrbanFV  = temp_wgtUrbanFV/urbanArea
 
        ! Add urban plumes to initial total plumes
-       write(iulog,*)'MDF: Adding this many urban plumes:',floor(urbanArea*clubb_mf_nup) 
-       patchPlumesTemp = patchPlumesTemp + floor(urbanArea*clubb_mf_nup)
-       write(iulog,*)'MDF: Value of patchPlumesTemp = ',patchPlumesTemp
+       !write(iulog,*)'MDF: Adding this many urban plumes:',floor(urbanArea*clubb_mf_nup) 
+       !patchPlumesTemp = patchPlumesTemp + floor(urbanArea*clubb_mf_nup)
+       !write(iulog,*)'MDF: Value of patchPlumesTemp = ',patchPlumesTemp
 
        ! Is urban the warmest patch? 
-       if (wgtUrbanSH > warmestPatchSH) then 
-          warmestPatchSH = wgtUrbanSH 
-       end if  
+       !if (wgtUrbanSH > warmestPatchSH) then 
+       !   warmestPatchSH = wgtUrbanSH 
+       !end if  
 
        ! Loop over surface patches
        do p=1,npft
-          ! If it's not urban, use the regular patch data 
-          if (patchLU(P) /= 8._r8) then 
-             thisPatchArea = patchArea(p)
-             thisPatchSH   = patchSH(p)
-             thisPatchLH   = patchLH(p)
-             thisPatchTHS  = patchTHS(p)
-             thisPatchFV   = patchFV(p)
-             ! If this is the warmest patch, add extra plumes to it 
-             if (thisPatchSH==warmestPatchSH) then 
-                patchPlumes = floor(clubb_mf_nup * thisPatchArea) + (clubb_mf_nup-patchPlumesTemp)
-                write(iulog,*)'MDF: THIS is the warm patch! Allocating n plumes: ',patchPlumes
-             else 
-                ! Number of plumes to initiate on this particular patch
-                patchPlumes = floor(clubb_mf_nup * thisPatchArea)
-             end if
-
-          ! If this is an urban patch and we haven't done urban yet, use urban
-          ! mean values 
-          else if (patchLU(p)==8._r8 .and. urbanDone==0._r8) then 
-             thisPatchArea = urbanArea
-             thisPatchSH   = wgtUrbanSH
-             thisPatchLH   = wgtUrbanLH
-             thisPatchTHS  = wgtUrbanTHS
-             thisPatchFV   = wgtUrbanFV
-
-             ! If this is the warmest patch, add extra plumes to it 
-             if (thisPatchSH==warmestPatchSH) then
-                patchPlumes = floor(clubb_mf_nup * thisPatchArea) + (clubb_mf_nup-patchPlumesTemp)
-                write(iulog,*)'MDF: THIS is the warm patch! (urban)'
-             else
-                ! Number of plumes to initiate on this particular patch
-                patchPlumes = floor(clubb_mf_nup * thisPatchArea)
-             end if
-
-             urbanDone=1
-          ! If this is an urban patch but we *have* dealt with urban, set the
-          ! patch area to zero so that it's ignored 
-          else if (patchLU(p)==8._r8 .and. urbanDone==1._r8) then
-             thisPatchArea = 0._r8
-             thisPatchSH   = 0._r8
-             thisPatchLH   = 0._r8
-             thisPatchTHS  = 0._r8
-             thisPatchFV   = 0._r8
-             patchPlumes   = 0 
-          end if 
+          thisPatchArea = patchArea(p)
+          thisPatchSH   = patchSH(p)
+          thisPatchLH   = patchLH(p)
+          thisPatchTHS  = patchTHS(p)
+          thisPatchFV   = patchFV(p)
+          write(iulog,*)'MDF: Value of patch SH = ',thisPatchSH
+          ! If this is the warmest patch, add extra plumes to it 
+          if (thisPatchSH==warmestPatchSH) then 
+             patchPlumes = floor(clubb_mf_nup * thisPatchArea) + (clubb_mf_nup-patchPlumesTemp)
+             write(iulog,*)'MDF: THIS is the warm patch! Allocating n plumes: ',patchPlumes, ' to p=',p
+             write(iulog,*)'MDF: warmest SH = ',warmestPatchSH
+          else 
+             ! Number of plumes to initiate on this particular patch
+             patchPlumes = floor(clubb_mf_nup * thisPatchArea)
+          end if
 
           !write(iulog,*)'MDF (debug): patch area ',patchArea(p)
 
@@ -761,7 +735,14 @@ module clubb_mf
 
           ! if surface buoyancy is positive & patch exists, then do mass-flux
           if ( wthv > 0._r8 .and. thisPatchArea > 0 .and. thisPatchArea<=1 ) then
-             write(iulog,*)'MDF (debug): You are within first loop (line 583)'
+             !write(iulog,*)'MDF (debug): You are within first loop (line 583)'
+             write(iulog,*)'MDF: this is patch  ',p 
+             write(iulog,*)'     wthv(p)      = ',wthv
+             write(iulog,*)'     thisPatchSH  = ',thisPatchSH
+             write(iulog,*)'     thisPatchTHS = ',thisPatchTHS
+             write(iulog,*)'     thisPatchLH  = ',thisPatchLH
+             write(iulog,*)'     thisPatchFV  = ',thisPatchFV
+
              letsDoMF = .true.
 
             ! --------------------------------------------------------- !
@@ -810,20 +791,9 @@ module clubb_mf
                pNorm = 1._r8
 
                do i=patchPlumesTotal+1, patchPlumesTotal+patchPlumes
-                   !write(iulog,*)'MDF: initiate plume i over patch p',i,p
-                   !write(iulog,*)'MDF: patchPlumes = ',patchPlumes
-                   !write(iulog,*)'MDF: pNorm = ',pNorm
 
-                   !write(iulog,*)'MDF: patchArea    = ',thisPatchArea
-                   !write(iulog,*)'MDF: patchSH      = ',patchSH(p)*rho_zm(1)*cpair
-                   !write(iulog,*)'MDF: patchLH      = ',thisPatchLH*rho_zm(1)
                    wlv = wmin + (wmax-wmin) / (real(patchPlumes,r8)) * (real(pNorm-1, r8))
                    wtv = wmin + (wmax-wmin) / (real(patchPlumes,r8)) * real(pNorm,r8)
-
-                   !wlv = wmin + (wmax-wmin) / (real(clubb_mf_nup,r8)) *
-                   !(real(i-1, r8))
-                   !wtv = wmin + (wmax-wmin) / (real(clubb_mf_nup,r8)) *
-                   !real(i,r8)
 
                    uplh(1,i)  = thisPatchLH*rho_zm(1)
 
