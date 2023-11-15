@@ -457,8 +457,10 @@ module clubb_mf
                                                wgtUrbanLH,wgtUrbanTHS,wgtUrbanFV,&
                                                warmestPatchSH, &
                                                thisPatchArea,thisPatchSH,        &
-                                               thisPatchLH,thisPatchTHS,thisPatchFV  
+                                               thisPatchLH,thisPatchTHS,thisPatchFV, &
+                                               wthv_bar  
      integer                                :: urbanDone
+     real(r8),parameter                     :: betaHET = 0.5_r8
      ! --- MDF 
 
      !
@@ -640,6 +642,10 @@ module clubb_mf
      sdnqt = 0._r8
      sdnthl= 0._r8
 
+     ! +++ MDF 
+     !ddbot = 0._r8
+     ! --- MDF
+
      dynamic_L0 = 0._r8
      ztop = 0._r8
 
@@ -662,6 +668,7 @@ module clubb_mf
      thisPatchFV      = 0._r8
      warmestPatchSH   = 0._r8
      urbanDone        = 0 
+     wthv_bar         = 0._r8
      ! --- MDF
 
      if (bsort) then
@@ -699,9 +706,9 @@ module clubb_mf
           !   temp_wgtUrbanTHS = temp_wgtUrbanTHS + (patchArea(p)*patchTHS(p))
           !   temp_wgtUrbanFV  = temp_wgtUrbanFV  + (patchArea(p)*patchFV(p))
           if (patchArea(p) > 0 .and. patchArea(p)<=1) then
-             write(iulog,*)'MDF: Adding this many plumes to patchPlumesTemp: ',floor(patchArea(p)*clubb_mf_nup)
+             !write(iulog,*)'MDF: Adding this many plumes to patchPlumesTemp: ',floor(patchArea(p)*clubb_mf_nup)
              patchPlumesTemp = patchPlumesTemp + floor(patchArea(p)*clubb_mf_nup)
-             write(iulog,*)'MDF: patchPlumesTemp = ',patchPlumesTemp,' after iPFT = ',p
+             !write(iulog,*)'MDF: patchPlumesTemp = ',patchPlumesTemp,' after iPFT = ',p
 
              if (patchSH(p)>warmestPatchSH) then 
                  warmestPatchSH = patchSH(p)
@@ -730,12 +737,12 @@ module clubb_mf
           thisPatchLH   = patchLH(p)
           thisPatchTHS  = patchTHS(p)
           thisPatchFV   = patchFV(p)
-          write(iulog,*)'MDF: Value of patch SH = ',thisPatchSH
+          !write(iulog,*)'MDF: Value of patch SH = ',thisPatchSH
           ! If this is the warmest patch, add extra plumes to it 
           if (thisPatchSH==warmestPatchSH) then 
              patchPlumes = floor(clubb_mf_nup * thisPatchArea) + (clubb_mf_nup-patchPlumesTemp)
-             write(iulog,*)'MDF: THIS is the warm patch! Allocating n plumes: ',patchPlumes, ' to p=',p
-             write(iulog,*)'MDF: warmest SH = ',warmestPatchSH
+             !write(iulog,*)'MDF: THIS is the warm patch! Allocating n plumes: ',patchPlumes, ' to p=',p
+             !write(iulog,*)'MDF: warmest SH = ',warmestPatchSH
           else 
              ! Number of plumes to initiate on this particular patch
              patchPlumes = floor(clubb_mf_nup * thisPatchArea)
@@ -745,17 +752,18 @@ module clubb_mf
 
           !wthv = patchSH(p)+zvir*patchTHS(p)*patchLH(p)
           wthv = thisPatchSH+zvir*thisPatchTHS*thisPatchLH
+          wthv_bar = wthl+zvir*ths*wqt
           !write(iulog,*)'MDF (debug): Value of wthv_patch = ',wthv
 
           ! if surface buoyancy is positive & patch exists, then do mass-flux
           if ( wthv > 0._r8 .and. thisPatchArea > 0 .and. thisPatchArea<=1 ) then
              !write(iulog,*)'MDF (debug): You are within first loop (line 583)'
-             write(iulog,*)'MDF: this is patch  ',p 
-             write(iulog,*)'     wthv(p)      = ',wthv
-             write(iulog,*)'     thisPatchSH  = ',thisPatchSH
-             write(iulog,*)'     thisPatchTHS = ',thisPatchTHS
-             write(iulog,*)'     thisPatchLH  = ',thisPatchLH
-             write(iulog,*)'     thisPatchFV  = ',thisPatchFV
+             ! write(iulog,*)'MDF: this is patch  ',p 
+             !write(iulog,*)'     wthv(p)      = ',wthv
+             !write(iulog,*)'     thisPatchSH  = ',thisPatchSH
+             !write(iulog,*)'     thisPatchTHS = ',thisPatchTHS
+             !write(iulog,*)'     thisPatchLH  = ',thisPatchLH
+             !write(iulog,*)'     thisPatchFV  = ',thisPatchFV
 
              letsDoMF = .true.
 
@@ -813,8 +821,15 @@ module clubb_mf
                      sigmathv = alphthv * abs(thvstar)
                    end if
 
+                   write(iulog,*)'MDF: sigmaw   = ',sigmaw
+                   write(iulog,*)'MDF: sigmaqt  = ',sigmaqt
+                   write(iulog,*)'MDF: sigmathv = ',sigmathv
+
                    wmin = sigmaw * pwmin
                    wmax = sigmaw * pwmax
+
+                   write(iulog,*)'MDF: wmin = ',wmin
+                   write(iulog,*)'MDF: wmax = ',wmax
 
                    wlv = wmin + (wmax-wmin) / (real(patchPlumes,r8)) * (real(pNorm-1, r8))
                    wtv = wmin + (wmax-wmin) / (real(patchPlumes,r8)) * real(pNorm,r8)
@@ -830,8 +845,19 @@ module clubb_mf
                    upu(1,i) = u(1)
                    upv(1,i) = v(1)
 
-                   upqt(1,i)  = cwqt * upw(1,i) * sigmaqt/sigmaw
-                   upthv(1,i) = cwthv * upw(1,i) * sigmathv/sigmaw
+                   ! MDF: 10/5/32: This seems to be the place to add the beta
+                   ! term...
+                   upqt(1,i)  = (cwqt * upw(1,i) * sigmaqt/sigmaw)+(betaHET*(qstar-(wqt/max(wstarmin,ustar))))
+                   upthv(1,i) = (cwthv * upw(1,i) *sigmathv/sigmaw)+(betaHET*(thvstar-(wthv_bar/max(wstarmin,ustar))))
+                   !upthv(1,i) = (cwthv * upw(1,i) * sigmathv/sigmaw)
+
+                   write(iulog,*)'MDF: thisPatchLH-wqt = ',thisPatchLH-wqt
+                   write(iulog,*)'MDF: thisPatchTHS-ths = ',thisPatchTHS-ths
+                   write(iulog,*)'MDF: upqt(1,i) = ',upqt(1,i)
+                   write(iulog,*)'MDF: upthv(1,i) = ',upthv(1,i)
+                   !write(iulog,*)'MDF: In patch loop, i = ',i
+                   !write(iulog,*)'MDF: upw(1,i) = ',upw(1,i)
+
 
                    pNorm = pNorm+1._r8
                end do ! plumes per patch 
@@ -934,6 +960,10 @@ module clubb_mf
             
             upqt(1,i)  = cwqt * upw(1,i) * sigmaqt/sigmaw
             upthv(1,i) = cwthv * upw(1,i) * sigmathv/sigmaw
+
+            write(iulog,*)'MDF: upqt(1,i) = ',upqt(1,i)
+            write(iulog,*)'MDF: upthv(1,i) = ',upthv(1,i)
+
           end do
        end if 
 
@@ -959,6 +989,10 @@ module clubb_mf
 ! --- MDF: End Big hammer section 
 
     if (letsDoMF) then
+       ! +++ MDF
+       write(iulog,*)'MDF: in letsDoMF'
+       ! --- MDF
+
        do i=1,clubb_mf_nup
 
          betaqt = (qt(4)-qt(2))/(0.5_r8*(dzt(4)+2._r8*dzt(3)+dzt(2)))
@@ -966,6 +1000,11 @@ module clubb_mf
 
          upqt(1,i)= qt(2)-betaqt*0.5_r8*(dzt(2)+dzt(1))+facqtu*upqt(1,i)
          upthv(1,i)= thv(2)-betathl*0.5_r8*(dzt(2)+dzt(1))+facthvu*upthv(1,i)
+
+         ! +++ MDF
+         write(iulog,*)'MDF: upthv(1,i) = ',upthv(1,i)
+         write(iulog,*)'MDF: upqt(1,i) = ',upqt(1,i)
+         ! --- MDF
 
          upthl(1,i) = upthv(1,i) / (1._r8+zvir*upqt(1,i))
          upth(1,i)  = upthl(1,i)
@@ -985,6 +1024,11 @@ module clubb_mf
            ! assume no cldliq
            upqc(1,i)  = 0._r8
          end if
+         ! +++ MDF
+         !write(iulog,*)'MDF: upthl(1,i) = ',upthl(1,i) 
+         !write(iulog,*)'MDF: upqs(1,i) = ',upqs(1,i)
+         !write(iulog,*)'MDF: upqc(1,i) = ',upqc(1,i)
+         ! --- MDF
        end do
 
        do i=1,clubb_mf_nup
@@ -995,12 +1039,22 @@ module clubb_mf
                           wmax, wmin, sigmaw, sigmaqt, sigmathv, cwqt, cwthv, zcb_unset, wa, wb,  &
                           do_condensation, qv, p_zt, zt, tpert, pblh, convh, rhinv, ztopm1(i), dynamic_L0(i), ztop(i), mcape(i))
 
+         !+++ MDF 
+         !write(iulog,*)'Initial value of dynamic_L0(i) = ',dynamic_L0(i)
+         !--- MDF
+
          ! cold pool feedback on the entrainmnet length scale
          dynamic_L0(i) = dynamic_L0(i) * cpfac(i)
+         !+++ MDF 
+         !write(iulog,*)'After cpfac, dynamic_L0(i) = ',dynamic_L0(i)
+         !--- MDF
 
          ! limit max/min
          dynamic_L0(i) = max(min_L0,dynamic_L0(i))
          dynamic_L0(i) = min(clubb_mf_max_L0,dynamic_L0(i))
+         !+++ MDF 
+         !write(iulog,*)'After max/min adjust, dynamic_L0(i) = ',dynamic_L0(i)
+         !--- MDF
 
          ! --------------------------------------------------------- !
          ! Stochastic entrainmnet calculation                        ! 
@@ -1029,13 +1083,30 @@ module clubb_mf
          do k=1,nz-1
 
            ! get microphysics, autoconversion
+           ! +++ MDF 
            if (do_clubb_mf_precip .and. upqc(k,i) > 0._r8) then
+           ! if (do_clubb_mf_precip .and. upqc(k,i) > 0._r8 .and. upw(1,i)> 0._r8) then
+
+             ! +++ MDF
+             !write(iulog,*)'MDF: Hey, this is in the upqc loop to do precip_mf' 
+             !write(iulog,*)'MDF: k,i = ',k,i
+             !write(iulog,*)'MDF: upqs(k,i) = ',upqs(k,i)
+             !write(iulog,*)'MDF: upqt(k,i) = ',upqt(k,i)
+             !write(iulog,*)'MDF: upw(k,i) = ',upw(k,i) 
+             !write(iulog,*)'MDF: Those are all the inputs to precip_mf!'
+             ! --- MDF
              call precip_mf(upqs(k,i),upqt(k,i),upw(k,i),dzt(k+1),zm(k+1)-zcb(i),supqt(k+1,i))
              supthl(k+1,i) = -1._r8*lmixn*supqt(k+1,i)*iexner_zt(k+1)/cpair
            else
              supqt(k+1,i)  = 0._r8
              supthl(k+1,i) = 0._r8
            end if
+
+           ! +++ MDF
+           !write(iulog,*)'MDF: Main upward sweep, get autoconversion and microphys...'
+           !write(iulog,*)'MDF: supthl(k+1,i) = ',supthl(k+1,i)
+           !write(iulog,*)'MDF: supqt(k+1,i) = ',supqt(k+1,i)
+           ! --- MDF
 
            ! compute mixing rate
            if (fixent) then
@@ -1270,6 +1341,7 @@ module clubb_mf
              lmixt = 0.5_r8*(uplmix(k,i)+uplmix(k-1,i))
              supqt(k,i) = supqt(k,i) + sevap
              supthl(k,i) = supthl(k,i) - lmixt*sevap*iexner_zt(k)/cpair
+
            end do
          end do
        end if
@@ -1584,6 +1656,11 @@ module clubb_mf
            !  sthldn(k) = sthldn(k) + 0.5_r8*(dna(k,i)+dna(k-1,i))*sdnthl(k,i)
            !end if
 
+           ! +++ MDF
+           !write(iulog,*)'MDF: k,i = ',k,i
+           !write(iulog,*)'MDF: sthlup(k) = ',sthlup(k)
+           ! --- MDF
+
            if (k > 1) then
              sqtup(k)  = sqtup(k)  + upa(k-1,i)*supqt(k,i)  
              sthlup(k) = sthlup(k) + upa(k-1,i)*supthl(k,i) 
@@ -1690,17 +1767,19 @@ module clubb_mf
        ! use single level for cold pool param.
        ! reset ddcp
        ddcp(:) = 0._r8
-       do i=1,clubb_mf_nup
-         if (ddbot(i) == 0) then
-           continue
-         else
-           if (do_clubb_mf_coldpool_perplume) then
-             ddcp(i) = -1._r8*dnw(ddbot(i)+1,i)
-           else
-             ddcp(:) = ddcp(:) + -1._r8*dna(ddbot(i)+1,i)*dnw(ddbot(i)+1,i)
-           end if
-         end if
-       end do
+       if (do_clubb_mf_precip .and. clubb_mf_fdd > 0._r8) then
+          do i=1,clubb_mf_nup
+            if (ddbot(i) == 0._r8) then
+              continue
+            else
+              if (do_clubb_mf_coldpool_perplume) then
+                ddcp(i) = -1._r8*dnw(ddbot(i)+1,i)
+              else
+                ddcp(:) = ddcp(:) + -1._r8*dna(ddbot(i)+1,i)*dnw(ddbot(i)+1,i)
+              end if
+            end if
+          end do
+       end if 
 !---ARH
 
        ! --------------------------------------------------------- !
@@ -1760,24 +1839,10 @@ module clubb_mf
            aqtqtup(k)    = aqtqtup(k)   + upa(k,i)*(upqt(k,i)-qt_env(k+1))*(upqt(k,i)-qt_env(k+1))
            aqtqtdn(k)    = aqtqtdn(k)   + dna(k,i)*(dnqt(k,i)-qt_env(k))*(dnqt(k,i)-qt_env(k))
   
-           !if (k==1) then
-           !   write(iulog,*)'MDF (figure out plume sfc): '
-           !   write(iulog,*)'   upa(k,i)   = ',upa(k,i)
-           !   write(iulog,*)'   upqt(k,i)  = ',upqt(k,i)
-           !   write(iulog,*)'   upthl(k,i) = ',upthl(k,i)
-           !end if
-
          end do
          athlthl(k) = athlthlup(k) + athlthldn(k)
          aqtqt(k)   = aqtqtup(k)   + aqtqtdn(k)     
 
-         !if (k==1) then
-         !   write(iulog,*)'MDF (debug vars): value of k   = ',k
-         !   write(iulog,*)'                : athlthl(k)   = ',athlthl(k)
-         !   write(iulog,*)'                : athlthlup(k) = ',athlthlup(k)
-         !   write(iulog,*)'                : aup(k)       = ',aup(k)
-         !   write(iulog,*)'                : thl_env(k+1) = ',thl_env(k+1)
-         ! end if
        end do
        ! --- MDF 
 
