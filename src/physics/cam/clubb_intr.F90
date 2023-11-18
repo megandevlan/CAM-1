@@ -1426,7 +1426,7 @@ end subroutine clubb_init_cnst
       call addfld ( 'edmf_ent'      , (/ 'lev' /),  'A', '1/m'     , 'ensemble mean entrainment (EDMF)' )
       call addfld ( 'edmf_ztop'     ,  horiz_only,  'A', 'm'       , 'edmf ztop',       flag_xyfill=.True.)
       call addfld ( 'edmf_ddcp'     ,  horiz_only,  'A', 'm/s'     , 'edmf ddcp',       flag_xyfill=.True.)
-      call addfld ( 'edmf_L0'       ,  horiz_only,  'A', 'm'       , 'edmf dynamic L0', flag_xyfill=.True.)
+      call addfld ( 'edmf_L0'       ,  (/ 'nens' /),'A', 'm'       , 'edmf dynamic L0', flag_xyfill=.True.)
       call addfld ( 'edmf_cfl'      ,  horiz_only,  'A', 'unitless', 'max flux cfl number (EDMF)' )
       call addfld ( 'edmf_cape'     ,  horiz_only,  'A', 'J/kg'    , 'ensemble mean CAPE (EDMF)' )
       call addfld ( 'edmf_upa'      , (/ 'ilev', 'nens' /), 'A', 'fraction', 'Plume updraft area fraction (EDMF)' )
@@ -2291,9 +2291,12 @@ end subroutine clubb_init_cnst
                                            mf_thvflx_output,                       &
                                            mf_rcm_output,     mf_precc_output
    !
-   real(r8), dimension(pcols)           :: mf_ztop_output,    mf_L0_output,        &
+   real(r8), dimension(pcols)           :: mf_ztop_output,                         &
                                            mf_cape_output,    mf_cfl_output,       &
                                            mf_ddcp_output
+   !
+   real(r8), dimension(pcols,clubb_mf_nup) :: mf_L0_output
+
    !
    ! MF outputs to outfld
    real(r8), dimension(pcols,pver)      :: mf_thlforcup_output, mf_qtforcup_output,  & ! thermodynamic grid
@@ -2952,7 +2955,7 @@ end subroutine clubb_init_cnst
    mf_qc_output(:,:)        = 0._r8
    mf_ztop_output(:)        = 0._r8
    mf_ddcp_output(:)        = 0._r8
-   mf_L0_output(:)          = 0._r8
+   mf_L0_output(:,:)        = 0._r8
    mf_cape_output(:)        = 0._r8
    mf_cfl_output(:)         = 0._r8
    mf_dnw_output(:,:)       = 0._r8
@@ -4124,7 +4127,7 @@ end subroutine clubb_init_cnst
         !if (mf_ztop_nadv == 0._r8) mf_ztop_nadv = fillvalue
         !if (mf_L0_nadv == 0._r8) mf_L0_nadv = fillvalue
         mf_ztop_output(i) = MAXVAL(ztopma(i,:)) !mf_ztop_nadv
-        mf_L0_output(i)   = MAXVAL(mf_L0_nadv)
+        mf_L0_output(i,:) = mf_L0_nadv
         mf_cfl_output(i)  = max_cfl_nadv
         mf_ddcp_output(i) = MAXVAL(ddcp(i,:)) !mf_ddcp_nadv !ddcp(i)
         do k=1,clubb_mf_nup
