@@ -448,7 +448,7 @@ module clubb_mf
      ! +++ MDF
      ! surface patch variables 
      integer                                :: p, patchPlumes, patchPlumesTotal, &
-                                               pNorm, patchPlumesTemp 
+                                               pNorm, patchPlumesTemp,firstSfc 
      !real(r8)                               :: wthvPatch
      logical                                :: letsDoMF = .false.
      real(r8)                               :: urbanArea, temp_wgtUrbanSH,       &
@@ -652,6 +652,7 @@ module clubb_mf
      ! +++ MDF 
      patchPlumesTotal = 0
      patchPlumesTemp  = 0
+     firstSfc         = 0
      urbanArea        = 0._r8
      temp_wgtUrbanSH  = 0._r8
      temp_wgtUrbanLH  = 0._r8
@@ -739,10 +740,12 @@ module clubb_mf
           thisPatchFV   = patchFV(p)
           !write(iulog,*)'MDF: Value of patch SH = ',thisPatchSH
           ! If this is the warmest patch, add extra plumes to it 
-          if (thisPatchSH==warmestPatchSH) then 
+          ! if (thisPatchSH==warmestPatchSH) then 
+          if (patchArea(p) > 0 .and. patchArea(p)<=1 .and. firstSfc==0) then
              patchPlumes = floor(clubb_mf_nup * thisPatchArea) + (clubb_mf_nup-patchPlumesTemp)
              !write(iulog,*)'MDF: THIS is the warm patch! Allocating n plumes: ',patchPlumes, ' to p=',p
              !write(iulog,*)'MDF: warmest SH = ',warmestPatchSH
+             firstSfc = 1
           else 
              ! Number of plumes to initiate on this particular patch
              patchPlumes = floor(clubb_mf_nup * thisPatchArea)
