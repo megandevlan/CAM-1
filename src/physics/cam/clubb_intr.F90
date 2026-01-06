@@ -729,24 +729,6 @@ end subroutine clubb_init_cnst
     namelist /clubbpbl_diff_nl/ clubb_cloudtop_cooling, clubb_rainevap_turb, &
                                 clubb_do_adv, clubb_timestep,  &
                                 clubb_rnevap_effic,clubb_do_icesuper
-<<<<<<< HEAD
-    namelist /clubb_params_nl/ clubb_c1, clubb_c1b, clubb_c11, clubb_c11b, clubb_c14, clubb_mult_coef, clubb_gamma_coef, &
-                               clubb_c_K10, clubb_c_K10h, clubb_beta, clubb_C2rt, clubb_C2thl, &
-			       clubb_C2rtthl, clubb_C8, clubb_C8b, clubb_C7, clubb_C7b, clubb_Skw_denom_coef, &
-                               clubb_C4, clubb_c_K9, clubb_nu9, clubb_C_wp2_splat, &
-                               clubb_lambda0_stability_coef, clubb_l_lscale_plume_centered, &
-                               clubb_l_use_ice_latent, clubb_do_liqsupersat, clubb_do_energyfix,&
-                               clubb_lmin_coef, clubb_skw_max_mag, clubb_l_stability_correct_tau_zm, &
-                               clubb_gamma_coefb, clubb_up2_vp2_factor, &
-                               clubb_l_use_C7_Richardson, clubb_l_use_C11_Richardson, &
-                               clubb_l_brunt_vaisala_freq_moist, clubb_l_use_thvm_in_bv_freq, &
-                               clubb_l_rcm_supersat_adj, clubb_l_damp_wp3_Skw_squared, &
-                               clubb_l_predict_upwp_vpwp, clubb_l_min_wp2_from_corr_wx, &
-                               clubb_l_min_xp2_from_corr_wx, clubb_l_upwind_xpyp_ta, clubb_l_vert_avg_closure, &
-                               clubb_l_trapezoidal_rule_zt, clubb_l_trapezoidal_rule_zm, &
-                               clubb_l_call_pdf_closure_twice, clubb_l_use_cloud_cover, &
-                               clubb_l_diag_Lscale_from_tau, clubb_l_damp_wp2_using_em, clubb_ctsm_moments
-=======
     namelist /clubb_params_nl/ clubb_beta, &
          clubb_bv_efold, &
          clubb_c1, &
@@ -862,7 +844,6 @@ end subroutine clubb_init_cnst
          clubb_wpxp_L_thresh, &
          clubb_wpxp_Ri_exp, &
          clubb_z_displace
->>>>>>> cam6_3_160
 
     !----- Begin Code -----
 
@@ -1149,13 +1130,10 @@ end subroutine clubb_init_cnst
     call mpi_bcast(clubb_l_diag_Lscale_from_tau,         1, mpi_logical, mstrid, mpicom, ierr)
     if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_l_diag_Lscale_from_tau")
     call mpi_bcast(clubb_l_damp_wp2_using_em,         1, mpi_logical, mstrid, mpicom, ierr)
-<<<<<<< HEAD
-    if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_l_damp_wp2_using_em") 
+    if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_l_damp_wp2_using_em")
     ! CLASP: adding here
     call mpi_bcast(clubb_ctsm_moments,         1, mpi_logical, mstrid, mpicom, ierr)
     if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_ctsm_moments")
-=======
-    if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_l_damp_wp2_using_em")
     call mpi_bcast(clubb_l_do_expldiff_rtm_thlm,      1, mpi_logical, mstrid, mpicom, ierr)
     if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_l_do_expldiff_rtm_thlm")
     call mpi_bcast(clubb_l_lmm_stepping,         1, mpi_logical, mstrid, mpicom, ierr)
@@ -1226,7 +1204,6 @@ end subroutine clubb_init_cnst
     if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_l_use_precip_frac")
     call mpi_bcast(clubb_l_uv_nudge, 1, mpi_logical, mstrid, mpicom, ierr)
     if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: clubb_l_uv_nudge")
->>>>>>> cam6_3_160
 
     !  Overwrite defaults if they are true
     if (clubb_history) stats_metadata%l_stats = .true.
@@ -1697,7 +1674,6 @@ end subroutine clubb_init_cnst
     clubb_params(ic_K9) = clubb_c_K9
     clubb_params(inu9)  = clubb_nu9
     clubb_params(iC_wp2_splat) = clubb_C_wp2_splat
-<<<<<<< HEAD
 
     call init_clubb_config_flags( clubb_config_flags ) ! In/Out
     clubb_config_flags%l_use_C7_Richardson = clubb_l_use_C7_Richardson
@@ -1725,7 +1701,6 @@ end subroutine clubb_init_cnst
     ! CLASP: Adding here
     clubb_config_flags%ctsm_moments = clubb_ctsm_moments
 
-=======
     clubb_params(iC_invrs_tau_bkgnd) = clubb_C_invrs_tau_bkgnd
     clubb_params(iC_invrs_tau_sfc) = clubb_C_invrs_tau_sfc
     clubb_params(iC_invrs_tau_shear) = clubb_C_invrs_tau_shear
@@ -1737,7 +1712,6 @@ end subroutine clubb_init_cnst
     clubb_params(ibv_efold) = clubb_bv_efold
     clubb_params(iwpxp_Ri_exp) = clubb_wpxp_Ri_exp
     clubb_params(iz_displace) = clubb_z_displace
->>>>>>> cam6_3_160
    
     !  Set up CLUBB core.  Note that some of these inputs are overwritten
     !  when clubb_tend_cam is called.  The reason is that heights can change
@@ -2108,41 +2082,14 @@ end subroutine clubb_init_cnst
     use time_manager,   only: get_nstep, is_first_restart_step
 
 #ifdef CLUBB_SGS
-<<<<<<< HEAD
-   use hb_diff,                   only: pblintd
-   use scamMOD,                   only: single_column,scm_clubb_iop_name, &
+
+    use hb_diff,                   only: pblintd
+    use scamMOD,                   only: single_column,scm_clubb_iop_name
+    use scamMOD,                   only: single_column,scm_clubb_iop_name, &
                                         have_wprtp_clasp, wprtp_clasp, &  ! clasp
                                         have_wpthlp_clasp, wpthlp_clasp, &
                                         have_upwp_clasp, upwp_clasp, &
                                         have_vpwp_clasp, vpwp_clasp
-   use clubb_api_module, only: &
-        nparams, &
-        read_parameters_api, &
-        setup_parameters_api, &
-        time_precision, &
-        advance_clubb_core_api, &
-        zt2zm_api, zm2zt_api, &
-        setup_grid_heights_api, &
-        em_min, &
-        w_tol_sqd, &
-        rt_tol, &
-        thl_tol, &
-        l_stats, &
-        stats_tsamp, &
-        stats_tout, &
-        stats_zt, &
-        stats_sfc, &
-        stats_zm, &
-        stats_rad_zt, &
-        stats_rad_zm, &
-        l_output_rad_files, &
-        stats_begin_timestep_api, &
-        hydromet_dim, calculate_thlp2_rad_api, mu, update_xp2_mc_api, &
-        sat_mixrat_liq_api, &
-        fstderr
-=======
-    use hb_diff,                   only: pblintd
-    use scamMOD,                   only: single_column,scm_clubb_iop_name
     use clubb_api_module, only: &
       nparams, &
       setup_parameters_api, &
@@ -2165,7 +2112,6 @@ end subroutine clubb_init_cnst
       init_pdf_params_api, &
       init_pdf_implicit_coefs_terms_api, &
       setup_grid_api
->>>>>>> cam6_3_160
 
     use clubb_api_module, only: &
       clubb_fatal_error    ! Error code value to indicate a fatal error
@@ -2228,7 +2174,6 @@ end subroutine clubb_init_cnst
     integer :: icnt
     logical :: lq2(pcnst)
 
-<<<<<<< HEAD
    real(r8) :: dtime				        ! CLUBB time step                               [s]   
    real(r8) :: edsclr_in(pverp+1-top_lev,edsclr_dim)    ! Scalars to be diffused through CLUBB 		[units vary]
    real(r8) :: wp2_in(pverp+1-top_lev)			! vertical velocity variance (CLUBB)		[m^2/s^2]
@@ -2349,9 +2294,6 @@ end subroutine clubb_init_cnst
    real(r8) :: tw_upper_a, tw_upper_b, tw_upper_diss
    real(r8) :: grid_dx(pcols), grid_dy(pcols)   ! CAM grid [m]
    real(r8) :: host_dx, host_dy                 ! CAM grid [m]
-=======
-    integer :: iter
->>>>>>> cam6_3_160
 
     integer :: clubbtop(pcols)
 
@@ -2387,7 +2329,6 @@ end subroutine clubb_init_cnst
     real(r8), dimension(state%ncol,sclr_dim) :: &
       wpsclrp_sfc            ! Scalar flux at surface                        [{units vary} m/s]
 
-<<<<<<< HEAD
    ! clasp
  
    ! logical  :: use_ctsm_moments = .true.
@@ -2426,7 +2367,6 @@ end subroutine clubb_init_cnst
     ! --------------- !
     ! Pointers        !
     ! --------------- !
-=======
     real(r8), dimension(state%ncol,edsclr_dim) :: &
       wpedsclrp_sfc        ! Eddy-scalar flux at surface                   [{units vary} m/s]
 
@@ -2764,7 +2704,6 @@ end subroutine clubb_init_cnst
     real(r8) :: tmp_lon1, tmp_lonN
                           
     type(grid) :: gr
->>>>>>> cam6_3_160
     
     type(nu_vertical_res_dep) :: nu_vert_res_dep   ! Vertical resolution dependent nu values
     real(r8) :: lmin
@@ -3566,7 +3505,6 @@ end subroutine clubb_init_cnst
           end do
         end do
 
-<<<<<<< HEAD
         !  Define ustar (based on case, if not variable)     
         ustar = 0.25_r8   ! Initialize ustar in case no case
     
@@ -3783,8 +3721,6 @@ end subroutine clubb_init_cnst
           p_in_Pa_zm(k) = state1%pint(i,pverp-k+1)
           invrs_exner_zm(k) = 1._r8/((p_in_Pa_zm(k)/p0_clubb)**(kappa_zm(k)))
         enddo
-=======
->>>>>>> cam6_3_160
       end if
     end if
 
@@ -3890,45 +3826,7 @@ end subroutine clubb_init_cnst
 
       end if
 
-<<<<<<< HEAD
-         !  Advance CLUBB CORE one timestep in the future
-         call advance_clubb_core_api &
-            ( l_implemented, dtime, fcor, sfc_elevation, hydromet_dim, &
-            thlm_forcing, rtm_forcing, um_forcing, vm_forcing, &
-            sclrm_forcing, edsclrm_forcing, wprtp_forcing, &
-            wpthlp_forcing, rtp2_forcing, thlp2_forcing, &
-            rtpthlp_forcing, wm_zm, wm_zt, &
-            wpthlp_sfc, wprtp_sfc, upwp_sfc, vpwp_sfc, &
-! +++ MDF
-            wp2_sfc, thlp2_sfc, rtp2_sfc, rtpthlp_sfc, &
-            wp4_sfc, wp3_sfc, wp2thlp_sfc, wp2rtp_sfc, &
-            wpthlp2_sfc, wprtp2_sfc, wprtpthlp_sfc, up2_sfc, vp2_sfc, &
-! --- MDF
-            wpsclrp_sfc, wpedsclrp_sfc, &
-            p_in_Pa, rho_zm, rho_in, exner, &
-            rho_ds_zm, rho_ds_zt, invrs_rho_ds_zm, &
-            invrs_rho_ds_zt, thv_ds_zm, thv_ds_zt, hydromet, &
-            rfrzm, radf, &
-            wphydrometp, wp2hmp, rtphmp_zt, thlphmp_zt, &
-            host_dx, host_dy, &
-            clubb_config_flags, &
-            um_in, vm_in, upwp_in, vpwp_in, up2_in, vp2_in, up3_in, vp3_in, &
-            thlm_in, rtm_in, wprtp_in, wpthlp_in, &
-            wp2_in, wp3_in, rtp2_in, rtp3_in, thlp2_in, thlp3_in, rtpthlp_in, &
-            sclrm, &
-            sclrp2, sclrp3, sclrprtp, sclrpthlp, &
-            wpsclrp, edsclr_in, err_code, &
-            rcm_inout, cloud_frac_inout, &
-            wpthvp_in, wp2thvp_in, rtpthvp_in, thlpthvp_in, &
-            sclrpthvp_inout, &
-            pdf_params_chnk(i,lchnk), pdf_params_zm_chnk(i,lchnk), &
-            pdf_implicit_coefs_terms_chnk(i,lchnk), &
-            khzm_out, khzt_out, &
-            qclvar_out, thlprcp_out, &
-            wprcp_out, ice_supersat_frac_out, &
-            rcm_in_layer_out, cloud_cover_out, &                            ! intent(out)
-            wp4, wprtp2, wpthlp2, wp2rtp, wp2thlp, wprtpthlp, wp3_zm )      ! clasp 
-=======
+
       !  Advance CLUBB CORE one timestep in the future
       call advance_clubb_core_api( gr, pverp+1-top_lev, ncol, &
           l_implemented, dtime, fcor, sfc_elevation, hydromet_dim, &
@@ -3937,6 +3835,11 @@ end subroutine clubb_init_cnst
           wpthlp_forcing, rtp2_forcing, thlp2_forcing, &
           rtpthlp_forcing, wm_zm, wm_zt, &
           wpthlp_sfc, wprtp_sfc, upwp_sfc, vpwp_sfc, &
+          ! +++ MDF
+          wp2_sfc, thlp2_sfc, rtp2_sfc, rtpthlp_sfc, &
+          p4_sfc, wp3_sfc, wp2thlp_sfc, wp2rtp_sfc, &
+          wpthlp2_sfc, wprtp2_sfc, wprtpthlp_sfc, up2_sfc, vp2_sfc, &
+          ! --- MDF
           wpsclrp_sfc, wpedsclrp_sfc, &
           upwp_sfc_pert, vpwp_sfc_pert, &
           rtm_ref, thlm_ref, um_ref, vm_ref, ug, vg, &
@@ -3971,7 +3874,6 @@ end subroutine clubb_init_cnst
           wprcp_out, w_up_in_cloud_out, w_down_in_cloud_out,  &
           cloudy_updraft_frac_out, cloudy_downdraft_frac_out, &
           rcm_in_layer_out, cloud_cover_out, invrs_tau_zm_out )
->>>>>>> cam6_3_160
 
       ! Note that CLUBB does not produce an error code specific to any column, and
       ! one value only for the entire chunk
@@ -3987,16 +3889,13 @@ end subroutine clubb_init_cnst
         call endrun(subr//':  Fatal error in CLUBB library')
       end if
 
-<<<<<<< HEAD
          ! clasp 
          wprtp2_zm=zt2zm_api(wprtp2)
          wpthlp2_zm=zt2zm_api(wpthlp2)
          wp2rtp_zm=zt2zm_api(wp2rtp)
          wp2thlp_zm=zt2zm_api(wp2thlp)
          wprtpthlp_zm=zt2zm_api(wprtpthlp)
-=======
       if (do_rainturb) then
->>>>>>> cam6_3_160
 
         do k=1,nlev+1
           do i=1,ncol
@@ -4042,7 +3941,6 @@ end subroutine clubb_init_cnst
           thlp2_in(i,:) = max(thl_tol**2,thlp2_in(i,:))
         end do
 
-<<<<<<< HEAD
       ! output clasp homs
       do k=1,pverp
          wprtp2_output(i,k)    = wprtp2(pverp-k+1)
@@ -4099,9 +3997,6 @@ end subroutine clubb_init_cnst
          khzm(i,pverp-k+1)         = khzm_out(k)
          qclvar(i,pverp-k+1)       = min(1._r8,qclvar_out(k))
          wm_zt_out(i,pverp-k+1)    = wm_zt(k)
-=======
-      end if
->>>>>>> cam6_3_160
 
       !  Check to see if stats should be output, here stats are read into
       !  output arrays to make them conformable to CAM output
@@ -4970,34 +4865,33 @@ end subroutine clubb_init_cnst
       call outfld( 'edmf_qtflx'    , mf_qtflx_output,           pcols, lchnk )
     end if
 
-<<<<<<< HEAD
    
    ! --------------------------------------------------------------- !
    ! Writing state variables after EDMF scheme for detailed analysis !
    ! --------------------------------------------------------------- !
-   if (do_clubb_mf) then
-     call outfld( 'edmf_DRY_A'    , mf_dry_a_output,           pcols, lchnk )
-     call outfld( 'edmf_MOIST_A'  , mf_moist_a_output,         pcols, lchnk )
-     call outfld( 'edmf_DRY_W'    , mf_dry_w_output,           pcols, lchnk )
-     call outfld( 'edmf_MOIST_W'  , mf_moist_w_output,         pcols, lchnk )
-     call outfld( 'edmf_DRY_QT'   , mf_dry_qt_output,          pcols, lchnk )
-     call outfld( 'edmf_MOIST_QT' , mf_moist_qt_output,        pcols, lchnk )
-     call outfld( 'edmf_DRY_THL'  , mf_dry_thl_output,         pcols, lchnk )
-     call outfld( 'edmf_MOIST_THL', mf_moist_thl_output,       pcols, lchnk )
-     call outfld( 'edmf_DRY_U'    , mf_dry_u_output,           pcols, lchnk )
-     call outfld( 'edmf_MOIST_U'  , mf_moist_u_output,         pcols, lchnk )
-     call outfld( 'edmf_DRY_V'    , mf_dry_v_output,           pcols, lchnk )
-     call outfld( 'edmf_MOIST_V'  , mf_moist_v_output,         pcols, lchnk )
-     call outfld( 'edmf_MOIST_QC' , mf_moist_qc_output,        pcols, lchnk )
-     call outfld( 'edmf_S_AE'     , s_ae_output,               pcols, lchnk )
-     call outfld( 'edmf_S_AW'     , s_aw_output,               pcols, lchnk )
-     call outfld( 'edmf_S_AWTHL'  , s_awthl_output,            pcols, lchnk )
-     call outfld( 'edmf_S_AWQT'   , s_awqt_output,             pcols, lchnk )
-     call outfld( 'edmf_S_AWU'    , s_awu_output,              pcols, lchnk )
-     call outfld( 'edmf_S_AWV'    , s_awv_output,              pcols, lchnk )
-     call outfld( 'edmf_thlflx'   , mf_thlflx_output,          pcols, lchnk )
-     call outfld( 'edmf_qtflx'    , mf_qtflx_output,           pcols, lchnk )
-   end if
+    if (do_clubb_mf) then
+      call outfld( 'edmf_DRY_A'    , mf_dry_a_output,           pcols, lchnk )
+      call outfld( 'edmf_MOIST_A'  , mf_moist_a_output,         pcols, lchnk )
+      call outfld( 'edmf_DRY_W'    , mf_dry_w_output,           pcols, lchnk )
+      call outfld( 'edmf_MOIST_W'  , mf_moist_w_output,         pcols, lchnk )
+      call outfld( 'edmf_DRY_QT'   , mf_dry_qt_output,          pcols, lchnk )
+      call outfld( 'edmf_MOIST_QT' , mf_moist_qt_output,        pcols, lchnk )
+      call outfld( 'edmf_DRY_THL'  , mf_dry_thl_output,         pcols, lchnk )
+      call outfld( 'edmf_MOIST_THL', mf_moist_thl_output,       pcols, lchnk )
+      call outfld( 'edmf_DRY_U'    , mf_dry_u_output,           pcols, lchnk )
+      call outfld( 'edmf_MOIST_U'  , mf_moist_u_output,         pcols, lchnk )
+      call outfld( 'edmf_DRY_V'    , mf_dry_v_output,           pcols, lchnk )
+      call outfld( 'edmf_MOIST_V'  , mf_moist_v_output,         pcols, lchnk )
+      call outfld( 'edmf_MOIST_QC' , mf_moist_qc_output,        pcols, lchnk )
+      call outfld( 'edmf_S_AE'     , s_ae_output,               pcols, lchnk )
+      call outfld( 'edmf_S_AW'     , s_aw_output,               pcols, lchnk )
+      call outfld( 'edmf_S_AWTHL'  , s_awthl_output,            pcols, lchnk )
+      call outfld( 'edmf_S_AWQT'   , s_awqt_output,             pcols, lchnk )
+      call outfld( 'edmf_S_AWU'    , s_awu_output,              pcols, lchnk )
+      call outfld( 'edmf_S_AWV'    , s_awv_output,              pcols, lchnk )
+      call outfld( 'edmf_thlflx'   , mf_thlflx_output,          pcols, lchnk )
+      call outfld( 'edmf_qtflx'    , mf_qtflx_output,           pcols, lchnk )
+    end if
 
    ! clasp 
    call outfld('WPRTP2_CLUBB', wprtp2_output, pcols, lchnk)
@@ -5017,12 +4911,8 @@ end subroutine clubb_init_cnst
    
    call outfld('WP3_ZM_CLUBB', wp3_zm_output, pcols, lchnk)
 
-   !  Output CLUBB history here
-   if (l_stats) then 
-=======
     !  Output CLUBB history here
     if (stats_metadata%l_stats) then 
->>>>>>> cam6_3_160
       
       do j=1,stats_zt(1)%num_output_fields
 
@@ -5923,7 +5813,6 @@ end function diag_ustar
 
 #endif
 
-<<<<<<< HEAD
 #ifdef CLUBB_SGS
   subroutine init_clubb_config_flags( clubb_config_flags_in )
 !-------------------------------------------------------------------------------
@@ -6130,6 +6019,4 @@ end function diag_ustar
   end subroutine init_clubb_config_flags
 #endif
   
-=======
->>>>>>> cam6_3_160
 end module clubb_intr
