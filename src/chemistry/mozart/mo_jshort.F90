@@ -71,12 +71,15 @@
       real(r8), allocatable :: xs_o3b(:)
       real(r8), allocatable :: xs_wl(:,:)
 
+      real(r8), parameter :: lno2_llimit = 38._r8 ! ln(NO2) lower limit
+      real(r8), parameter :: lno2_ulimit = 56._r8 ! ln(NO2) upper limit
+
       contains
 
       subroutine jshort_init( xs_coef_file, xs_short_file, sht_indexer )
 !------------------------------------------------------------------------------
 !    ... initialize photorates for 120nm <= lambda <= 200nm
-!------------------------------------------------------------------------------            
+!------------------------------------------------------------------------------
 
       use mo_util,        only : rebin
       use solar_irrad_data,  only : data_nbins=>nbins, data_we => we, data_etf => sol_etf
@@ -85,7 +88,7 @@
 
 !------------------------------------------------------------------------------
 !    ... dummy arguments
-!------------------------------------------------------------------------------            
+!------------------------------------------------------------------------------
       character(len=*), intent(in) :: xs_coef_file, xs_short_file
       integer, intent(inout)       :: sht_indexer(:)
 
@@ -211,18 +214,18 @@
       do m = 1,phtcnt
          if( pht_alias_lst(m,1) == ' ' ) then
             ierr = pio_inq_varid( ncid, rxt_tag_lst(m), varid )
-            if( ierr == PIO_noerr ) then 
+            if( ierr == PIO_noerr ) then
                sht_indexer(m) = varid
             end if
          else if( pht_alias_lst(m,1) == 'userdefined' ) then
             sht_indexer(m) = -1
          else
             ierr = pio_inq_varid( ncid, pht_alias_lst(m,1), varid )
-            if( ierr == PIO_noerr ) then 
+            if( ierr == PIO_noerr ) then
                sht_indexer(m) = varid
             else
                write(iulog,*) 'get_crs : ',rxt_tag_lst(m)(:len_trim(rxt_tag_lst(m))),' alias ', &
-                    pht_alias_lst(m,1)(:len_trim(pht_alias_lst(m,1))),' not in dataset'            
+                    pht_alias_lst(m,1)(:len_trim(pht_alias_lst(m,1))),' not in dataset'
                call endrun
             end if
          end if
@@ -252,39 +255,39 @@
 !       ... allocate arrays
 !------------------------------------------------------------------------------
       allocate( wc(nw),stat=ierr )
-      if( ierr /= 0 ) then 
+      if( ierr /= 0 ) then
 	 call alloc_err( ierr, 'get_crs', 'wc', nw )
       end if
       allocate( we(nw+1),stat=ierr )
-      if( ierr /= 0 ) then 
+      if( ierr /= 0 ) then
 	 call alloc_err( ierr, 'get_crs', 'we', nw+1 )
       end if
       allocate( wlintv(nw),stat=ierr )
-      if( ierr /= 0 ) then 
+      if( ierr /= 0 ) then
 	 call alloc_err( ierr, 'get_crs', 'wlintv', nw )
       end if
       allocate( etfphot(nw),stat=ierr )
-      if( ierr /= 0 ) then 
+      if( ierr /= 0 ) then
 	 call alloc_err( ierr, 'get_crs', 'etfphot', nw )
       end if
       allocate( bde_o2_a(nw),bde_o2_b(nw),bde_o3_a(nw),bde_o3_b(nw),stat=ierr )
-      if( ierr /= 0 ) then 
+      if( ierr /= 0 ) then
 	 call alloc_err( ierr, 'get_crs', 'bde_o2_a ... bde_o3_b', nw )
       end if
       allocate( etfphot_ms93(nw_ms93),stat=ierr )
-      if( ierr /= 0 ) then 
+      if( ierr /= 0 ) then
 	 call alloc_err( ierr, 'get_crs', 'etfphot_ms93', nw_ms93 )
       end if
       allocate( xs_o2src(nw),stat=ierr )
-      if( ierr /= 0 ) then 
+      if( ierr /= 0 ) then
 	 call alloc_err( ierr, 'get_crs', 'xs_o2src', nw )
       end if
       allocate( xs_o3a(nw),xs_o3b(nw),stat=ierr )
-      if( ierr /= 0 ) then 
+      if( ierr /= 0 ) then
          call alloc_err( ierr, 'get_crs', 'xs_o3a,xs_o3b', nw )
       end if
       allocate( xs_species(nw),xs_wl(nw,nj),stat=ierr )
-      if( ierr /= 0 ) then 
+      if( ierr /= 0 ) then
          call alloc_err( ierr, 'get_crs', 'xs_species,xs_wl', nw*nj )
       end if
 
@@ -371,7 +374,7 @@
 
 !------------------------------------------------------------------------------
 !    ... Dummy arguments
-!------------------------------------------------------------------------------            
+!------------------------------------------------------------------------------
       character(len=*), intent(in) :: xs_coef_file
 
 !-------------------------------------------------------------
@@ -1227,7 +1230,7 @@
 !------------------------------------------------------------------------------
 ! Find index of layer in which the screening height lies
 !------------------------------------------------------------------------------
-           id = i 
+           id = i
            if( zenith_angle > 90._r8 ) then
               do j = 1,nlayer
                  if( rpsinz < (zd(j-1) + re) .and.  rpsinz >= (zd(j) + re) ) then
@@ -1236,7 +1239,7 @@
 		 end if
               end do
            end if
- 
+
            do j = 1,id
              sm = 1._r8
              if( j == id .and. id == i .and. zenith_angle > 90._r8 ) then
@@ -1329,7 +1332,7 @@
 !         height needs to be increased for higher model top
 !------------------------------------------------------------------------------
       if (nlev==pver) then
-         if ( waccmx_is('ionosphere') .or. waccmx_is('neutral') ) then 
+         if ( waccmx_is('ionosphere') .or. waccmx_is('neutral') ) then
            hscale     = 20.e5_r8
          else
            hscale     = 10.e5_r8
@@ -1372,7 +1375,8 @@
 !   bands and an effective O2 optical depth at all altitudes.  Parameterized  !
 !   after:  Chabrillat, S., and G. Kockarts, Simple parameterization of the   !
 !   absorption of the solar Lyman-Alpha line, Geophysical Research Letters,   !
-!   Vol.24, No.21, pp 2659-2662, 1997.                                        !
+!   Vol.24, No.21, pp 2659-2662, 1997. doi:10.1029/97GL52690 (note there is a !
+!   correction to this paper - the table was missing minuses in the exponents)!
 !-----------------------------------------------------------------------------!
 !   PARAMETERS:                                                               !
 !   nz      - INTEGER, number of specified altitude levels in the working (I) !
@@ -1384,7 +1388,7 @@
 !   xso2la  - REAL, molecular absorption cross section in LA bands        (O) !
 !-----------------------------------------------------------------------------!
 !   EDIT HISTORY:                                                             !
-!   01/15/2002 Taken from Sasha Madronich's TUV Version 4.1a, Doug Kinnison   !                  !
+!   01/15/2002 Taken from Sasha Madronich's TUV Version 4.1a, Doug Kinnison   !
 !   01/15/2002 Upgraded to F90, DK                                            !
 !-----------------------------------------------------------------------------!
 
@@ -1491,17 +1495,17 @@
 
       do k = 1,nlev
 	x  = log( o2col(k) )
-	if( x >= 38._r8 .and. x <= 56._r8 ) then
+	if( x >= lno2_llimit .and. x <= lno2_ulimit ) then
           call effxs( x, tlev(k), xs )
           xscho2(k,:) = xs(:)
-	else if( x < 38._r8 ) then
+	else if( x < lno2_llimit ) then
 	   ktop1 = k-1
            ktop  = min( ktop1,ktop )
-	else if( x > 56._r8 ) then
+	else if( x > lno2_ulimit ) then
 	   kbot = k
 	end if
       end do
-      
+
       if ( kbot == nlev ) then
          tsrb(:,:) = 0._r8
          xscho2(:,:) = 0._r8
@@ -1511,9 +1515,9 @@
 !     ... Fill in cross section where X is out of range
 !         by repeating edge table values
 !-------------------------------------------------------
-      if ( waccmx_is('ionosphere') .or. waccmx_is('neutral') ) then 
+      if ( waccmx_is('ionosphere') .or. waccmx_is('neutral') ) then
 
-         ! Need to be careful with nlev values for kbot and ktop. 
+         ! Need to be careful with nlev values for kbot and ktop.
          ! This was handled by Hanli Liu fix.
          if ( kbot < nlev ) then
             do k = 1,kbot
@@ -1544,7 +1548,7 @@
 !-------------------------------------------------------
 !     ... Calculate incremental optical depths
 !-------------------------------------------------------
-      do i = 1,nsrbtuv 
+      do i = 1,nsrbtuv
         do k = 1,nlev-1
 	   if( nid(nlev-k) /= -1 ) then
 !-------------------------------------------------------
@@ -1600,9 +1604,9 @@
 !     method:
 !     ln(xs) = A(X)[T-220]+B(X)
 !     X = log of slant column of O2
-!     A,B calculated from chebyshev polynomial coeffs
-!     AC and BC using NR routine chebev.  Assume interval
-!     is 38<ln(NO2)<56.
+!     A,B are calculated from Chebyshev polynomial coeffs
+!     AC and BC using Clenshaw summation algorithm within
+!     the interval 38<ln(NO2)<56.
 !
 !     Revision History:
 !
@@ -1638,8 +1642,6 @@
 !       Wavelength intervals are defined in WMO1985
 !-------------------------------------------------------------
 
-      implicit none
-
 !-------------------------------------------------------------
 !	... Dummy arguments
 !-------------------------------------------------------------
@@ -1651,56 +1653,50 @@
 !-------------------------------------------------------------
       integer :: i
 
+      if (x<lno2_llimit .or. x>lno2_ulimit) then
+         call endrun('mo_jshort::calc_params of O2 abs xs: x is not in the valid range. ')
+      end if
+
 !-------------------------------------------------------------
-!     ... call chebyshev evaluation routine to calc a and b from
-!	    set of 20 coeficients for each wavelength
+!     ... evaluate at each wavelength
+!	  for a set of 20 Chebyshev coeficients
 !-------------------------------------------------------------
       do i = 1,nsrbtuv
-        a(i) = jchebev( 38._r8, 56._r8, ac(1,i), 20, x )
-        b(i) = jchebev( 38._r8, 56._r8, bc(1,i), 20, x )
+         a(i) = evalchebpoly( ac(:,i), x )
+         b(i) = evalchebpoly( bc(:,i), x )
       end do
 
       contains
 
-      function jchebev( a, b, c, m, x )
-!-------------------------------------------------------------
-!     Chebyshev evaluation algorithm
-!     See Numerical recipes p193
-!-------------------------------------------------------------
+        ! Use Clenshaw summation algorithm to evaluate Chebyshev polynomial at point
+        ! [pnt - (lno2_ulimit + lno2_llimit)/2]/[(lno2_ulimit - lno2_llimit)/2]
+        ! given coefficients coefs within limits lim1 and lim2
+        pure function evalchebpoly( coefs, pnt ) result(cval)
+          real(r8), intent(in) :: coefs(:)
+          real(r8), intent(in) :: pnt
 
-!-------------------------------------------------------------
-!	... Dummy arguments
-!-------------------------------------------------------------
-      integer, intent(in)     :: m
-      real(r8), intent(in)    :: a, b, x
-      real(r8), intent(in)    :: c(m)
+          real(r8) :: cval
+          real(r8) :: fac(2)
+          real(r8) :: csum(2) ! Clenshaw summation
+          integer :: ndx
+          integer :: ncoef
 
-      real(r8) :: jchebev
-!-------------------------------------------------------------
-!	... Local variables
-!-------------------------------------------------------------
-      integer  :: j
-      real(r8) :: d, dd, sv, y, y2
+          ncoef = size(coefs)
 
-      if( (x - a)*(x - b) > 0._r8 ) then
-	  write(iulog,*) 'x not in range in chebev', x
-	  jchebev = 0._r8
-	  return
-      end if
+          fac(1) = (2._r8*pnt-lno2_llimit-lno2_ulimit)/(lno2_ulimit-lno2_llimit)
+          fac(2) = 2._r8*fac(1)
 
-      d  = 0._r8
-      dd = 0._r8
-      y  = (2._r8*x - a - b)/(b - a)
-      y2 = 2._r8*y
-      do j = m,2,-1
-        sv = d
-        d  = y2*d - dd + c(j)
-        dd = sv
-      end do
+          ! Clenshaw recurrence summation
+          csum(:) = 0.0_r8
+          do ndx = ncoef, 2, -1
+             cval = csum(1)
+             csum(1) = fac(2)*csum(1) - csum(2) + coefs(ndx)
+             csum(2) = cval
+          end do
 
-      jchebev = y*d - dd + .5_r8*c(1)
+          cval = fac(1)*csum(1) - csum(2) + 0.5_r8*coefs(1)
 
-      end function jchebev
+        end function evalchebpoly
 
       end subroutine calc_params
 

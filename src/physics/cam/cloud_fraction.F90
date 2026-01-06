@@ -22,7 +22,9 @@ module cloud_fraction
      cldfrc_init,      &! Inititialization of cloud_fraction run-time parameters
      cldfrc_getparams, &! public access of tuning parameters
      cldfrc,           &! Computation of cloud fraction
-     cldfrc_fice        ! Calculate fraction of condensate in ice phase (radiation partitioning)
+     cldfrc_fice,      &! Calculate fraction of condensate in ice phase (radiation partitioning)
+     dp1,              &! parameter for deep convection cloud fraction needed in clubb_intr
+     dp2               ! parameter for deep convection cloud fraction needed in clubb_intr
 
   ! Private data
   real(r8), parameter :: unset_r8 = huge(1.0_r8)
@@ -749,10 +751,10 @@ subroutine cldfrc(lchnk   ,ncol    , pbuf,  &
 
 ! Arguments
     integer,  intent(in)  :: ncol                 ! number of active columns
-    real(r8), intent(in)  :: t(pcols,pver)        ! temperature
+    real(r8), intent(in)  :: t(:,:)        ! temperature
 
-    real(r8), intent(out) :: fice(pcols,pver)     ! Fractional ice content within cloud
-    real(r8), intent(out) :: fsnow(pcols,pver)    ! Fractional snow content for convection
+    real(r8), intent(out) :: fice(:,:)     ! Fractional ice content within cloud
+    real(r8), intent(out) :: fsnow(:,:)    ! Fractional snow content for convection
 
 ! Local variables
     real(r8) :: tmax_fice                         ! max temperature for cloud ice formation

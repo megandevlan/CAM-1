@@ -19,12 +19,13 @@ module physpkg
   use camsrfexch,      only: cam_out_t, cam_in_t, cam_export
 
   ! Note: ideal_phys is true for Held-Suarez (1994) physics
-  use cam_control_mod, only: moist_physics, adiabatic, ideal_phys, kessler_phys, tj2016_phys
+  use cam_control_mod, only: moist_physics, adiabatic, ideal_phys, kessler_phys, tj2016_phys, frierson_phys
   use phys_control,    only: phys_getopts
   use perf_mod,        only: t_barrierf, t_startf, t_stopf, t_adj_detailf
   use cam_logfile,     only: iulog
   use cam_abortutils,  only: endrun
   use shr_sys_mod,     only: shr_sys_flush
+  use dyn_tests_utils, only: vc_dycore
 
   implicit none
   private
@@ -46,6 +47,8 @@ module physpkg
   integer :: qini_idx      = 0
   integer :: cldliqini_idx = 0
   integer :: cldiceini_idx = 0
+  integer :: totliqini_idx = 0
+  integer :: toticeini_idx = 0
 
   logical :: state_debug_checks  ! Debug physics_state.
 
@@ -77,6 +80,7 @@ contains
     use check_energy,       only: check_energy_register
     use kessler_cam,        only: kessler_register
     use tj2016_cam,         only: thatcher_jablonowski_register
+    use frierson_cam,       only: frierson_register
 
     !---------------------------Local variables-----------------------------
     !
@@ -108,6 +112,8 @@ contains
       call kessler_register()
     else if (tj2016_phys) then
       call thatcher_jablonowski_register()
+    else if (frierson_phys) then
+      call frierson_register()
     end if
 
     ! Fields for physics package diagnostics
@@ -116,6 +122,8 @@ contains
     if (moist_physics) then
       call pbuf_add_field('CLDLIQINI', 'physpkg', dtype_r8, (/pcols,pver/), cldliqini_idx)
       call pbuf_add_field('CLDICEINI', 'physpkg', dtype_r8, (/pcols,pver/), cldiceini_idx)
+      call pbuf_add_field('TOTLIQINI', 'physpkg', dtype_r8, (/pcols,pver/), totliqini_idx)
+      call pbuf_add_field('TOTICEINI', 'physpkg', dtype_r8, (/pcols,pver/), toticeini_idx)
     end if
 
     ! check energy package
@@ -183,7 +191,7 @@ contains
     !-----------------------------------------------------------------------
 
     use physics_buffer,     only: physics_buffer_desc, pbuf_initialize, pbuf_get_index
-    use physconst,          only: physconst_init
+    use cam_thermo,         only: cam_thermo_init
 
     use cam_control_mod,    only: initial_run
     use check_energy,       only: check_energy_init
@@ -192,11 +200,16 @@ contains
     use held_suarez_cam,    only: held_suarez_init
     use kessler_cam,        only: kessler_cam_init
     use tj2016_cam,         only: thatcher_jablonowski_init
+    use frierson_cam,       only: frierson_init
     use tracers,            only: tracers_init
     use wv_saturation,      only: wv_sat_init
     use phys_debug_util,    only: phys_debug_init
     use qneg_module,        only: qneg_init
+    use nudging,            only: Nudge_Model, nudging_init
     use cam_snapshot,       only: cam_snapshot_init
+    use cam_budget,         only: cam_budget_init
+
+    use ccpp_constituent_prop_mod, only: ccpp_const_props_init
 
     ! Input/output arguments
     type(physics_state), pointer       :: phys_state(:)
@@ -220,7 +233,7 @@ contains
     ! Initialize any variables in physconst which are not temporally and/or
     !   spatially constant
     !---------------------------------------------------------------------------
-    call physconst_init()
+    call cam_thermo_init()
 
     ! Initialize debugging a physics column
     call phys_debug_init()
@@ -237,7 +250,7 @@ contains
 
     ! wv_saturation is relatively independent of everything else and
     ! low level, so init it early. Must at least do this before radiation.
-    if (kessler_phys .or. tj2016_phys) then
+    if (kessler_phys .or. tj2016_phys .or. frierson_phys) then
       call wv_sat_init()
     end if
 
@@ -248,23 +261,36 @@ contains
     end if
 
     if (ideal_phys) then
-      call held_suarez_init(pbuf2d)
+      call held_suarez_init()
     else if (kessler_phys) then
-      call kessler_cam_init(pbuf2d)
+      call kessler_cam_init()
     else if (tj2016_phys) then
       call thatcher_jablonowski_init(pbuf2d)
+    else if (frierson_phys) then
+      call frierson_init(phys_state,pbuf2d)
     end if
+
+    ! Initialize Nudging Parameters
+    !--------------------------------
+    if(Nudge_Model) call nudging_init
 
     if (chem_is_active()) then
       ! Prognostic chemistry.
       call chem_init(phys_state,pbuf2d)
     end if
 
+    ! Initialize CAM CCPP constituent properties array
+    ! for use in CCPP-ized physics schemes:
+    call ccpp_const_props_init()
+
     ! Initialize qneg3 and qneg4
     call qneg_init()
 
     ! Initialize the snapshot capability
     call cam_snapshot_init(cam_in, cam_out, pbuf2d, begchunk)
+
+    ! Initialize energy budgets
+    call cam_budget_init()
 
   end subroutine phys_init
 
@@ -467,11 +493,17 @@ contains
     use constituents,    only: cnst_get_ind, pcnst
     use cam_diagnostics, only: diag_phys_tend_writeout, diag_surf
     use tj2016_cam,      only: thatcher_jablonowski_sfc_pbl_hs_tend
+    use frierson_cam,    only: frierson_pbl_tend
     use dycore,          only: dycore_is
-    use check_energy,    only: calc_te_and_aam_budgets
+    use check_energy,    only: tot_energy_phys
     use cam_history,     only: hist_fld_active
-    use cam_snapshot,    only: cam_snapshot_all_outfld
-    use cam_snapshot,    only: cam_snapshot_ptend_outfld
+    use cam_thermo,      only: cam_thermo_water_update
+    use cam_budget,      only: thermo_budget_history
+    use dyn_tests_utils, only: vc_dycore, vc_height, vc_dry_pressure
+    use air_composition, only: cpairv, cp_or_cv_dycore
+    use time_manager,    only: get_nstep
+    use nudging,         only: Nudge_Model, Nudge_ON, nudging_timestep_tend
+    use check_energy,    only: check_energy_chng
 
     ! Arguments
     !
@@ -485,6 +517,9 @@ contains
 
     !---------------------------Local workspace-----------------------------
 
+    integer :: nstep                               ! current timestep number
+    real(r8):: zero(pcols)                         ! array of zeros
+
     type(physics_ptend)                      :: ptend  ! indivdual parameterization tendencies
     real(r8)                                 :: tmp_q(pcols, pver)
     real(r8)                                 :: tmp_cldliq(pcols, pver)
@@ -493,19 +528,28 @@ contains
     real(r8), pointer                        :: qini(:,:)
     real(r8), pointer                        :: cldliqini(:,:)
     real(r8), pointer                        :: cldiceini(:,:)
+    real(r8), pointer                        :: totliqini(:,:)
+    real(r8), pointer                        :: toticeini(:,:)
     integer                                  :: ixcldliq
     integer                                  :: ixcldice
     integer                                  :: k
-    integer                                  :: ncol
+    integer                                  :: ncol, lchnk
     integer                                  :: itim_old
+    logical                                  :: moist_mixing_ratio_dycore
 
     real(r8) :: tmp_trac  (pcols,pver,pcnst) ! tmp space
     real(r8) :: tmp_pdel  (pcols,pver)       ! tmp space
     real(r8) :: tmp_ps    (pcols)            ! tmp space
+    real(r8) :: scaling(pcols,pver)
     !--------------------------------------------------------------------------
+
+    ! get nstep and zero array for energy checker
+    zero = 0._r8
+    nstep = get_nstep()
 
     ! number of active atmospheric columns
     ncol  = state%ncol
+    lchnk = state%lchnk
     ! Associate pointers with physics buffer fields
     itim_old = pbuf_old_tim_idx()
 
@@ -518,14 +562,18 @@ contains
     if (moist_physics) then
       call pbuf_get_field(pbuf, cldliqini_idx, cldliqini)
       call pbuf_get_field(pbuf, cldiceini_idx, cldiceini)
+      call pbuf_get_field(pbuf, totliqini_idx, totliqini)
+      call pbuf_get_field(pbuf, toticeini_idx, toticeini)
     else
       allocate(cldliqini(pcols, pver))
       cldliqini = 0.0_r8
       allocate(cldiceini(pcols, pver))
       cldiceini = 0.0_r8
+      allocate(totliqini(pcols, pver))
+      totliqini = 0.0_r8
+      allocate(toticeini(pcols, pver))
+      toticeini = 0.0_r8
     end if
-
-    call calc_te_and_aam_budgets(state, 'pAP')
 
     !=========================
     ! Compute physics tendency
@@ -536,13 +584,33 @@ contains
        call physics_update(state, ptend, ztodt, tend)
     end if
 
+    if (frierson_phys) then
+       ! Update surface, PBL
+       call frierson_pbl_tend(state, ptend, ztodt, cam_in)
+       call physics_update(state, ptend, ztodt, tend)
+    end if
+
+    ! Update Nudging values, if needed
+    !----------------------------------
+    if (Nudge_Model .and. Nudge_ON) then
+      call nudging_timestep_tend(state,ptend)
+      call physics_update(state, ptend, ztodt, tend)
+      call check_energy_chng(state, tend, "nudging", nstep, ztodt, zero, zero, zero, zero)
+    endif
+
+    call tot_energy_phys(state, 'phAP')
+    call tot_energy_phys(state, 'dyAP',vc=vc_dycore)
+
     ! FV: convert dry-type mixing ratios to moist here because
     !     physics_dme_adjust assumes moist. This is done in p_d_coupling for
     !     other dynamics. Bundy, Feb 2004.
     !
-    if (moist_physics .and. (dycore_is('LR') .or. dycore_is('FV3'))) then
-      call set_dry_to_wet(state)    ! Physics had dry, dynamics wants moist
-    end if
+    moist_mixing_ratio_dycore = dycore_is('LR').or. dycore_is('FV3')
+    !
+    ! update cp/cv for energy computation based in updated water variables
+    !
+    call cam_thermo_water_update(state%q(:ncol,:,:), lchnk, ncol, vc_dycore,&
+         to_dry_factor=state%pdel(:ncol,:)/state%pdeldry(:ncol,:))
 
     if (moist_physics) then
       ! Scale dry mass and energy (does nothing if dycore is EUL or SLD)
@@ -559,48 +627,59 @@ contains
       else
         tmp_cldice(:ncol,:pver) = 0.0_r8
       end if
-
-      ! For not 'FV'|'FV3', physics_dme_adjust is called for energy diagnostic purposes only.
+      !
+      ! for dry mixing ratio dycore, physics_dme_adjust is called for energy diagnostic purposes only.
       ! So, save off tracers
-      if (.not.(dycore_is('FV').or.dycore_is('FV3')) .and. &
-           (hist_fld_active('SE_pAM').or.hist_fld_active('KE_pAM').or.hist_fld_active('WV_pAM').or.&
-           hist_fld_active('WL_pAM').or.hist_fld_active('WI_pAM'))) then
-        tmp_trac(:ncol,:pver,:pcnst) = state%q(:ncol,:pver,:pcnst)
-        tmp_pdel(:ncol,:pver)        = state%pdel(:ncol,:pver)
-        tmp_ps(:ncol)                = state%ps(:ncol)
+      if (.not.moist_mixing_ratio_dycore) then
         !
-        ! pint, lnpint,rpdel are altered by dme_adjust but not used for tendencies in dynamics of SE
-        ! we do not reset them to pre-dme_adjust values
+        ! for dry-mixing ratio based dycores dme_adjust takes place in the dynamical core
         !
-        if (dycore_is('SE')) call set_dry_to_wet(state)
-
-        if (trim(cam_take_snapshot_before) == "physics_dme_adjust") then
-           call cam_snapshot_all_outfld(cam_snapshot_before_num, state, tend, cam_in, cam_out, pbuf)
+        ! only compute dme_adjust for diagnostics purposes
+        !
+        if (thermo_budget_history) then
+          tmp_trac(:ncol,:pver,:pcnst) = state%q(:ncol,:pver,:pcnst)
+          tmp_pdel(:ncol,:pver)        = state%pdel(:ncol,:pver)
+          tmp_ps(:ncol)                = state%ps(:ncol)
+          call physics_dme_adjust(state, tend, qini, totliqini, toticeini, ztodt)
+          call tot_energy_phys(state, 'phAM')
+          call tot_energy_phys(state, 'dyAM', vc=vc_dycore)
+          ! Restore pre-"physics_dme_adjust" tracers
+          state%q(:ncol,:pver,:pcnst) = tmp_trac(:ncol,:pver,:pcnst)
+          state%pdel(:ncol,:pver)     = tmp_pdel(:ncol,:pver)
+          state%ps(:ncol)             = tmp_ps(:ncol)
         end if
-
-        call physics_dme_adjust(state, tend, qini, ztodt)
-
-        if (trim(cam_take_snapshot_after) == "physics_dme_adjust") then
-           call cam_snapshot_all_outfld(cam_snapshot_after_num, state, tend, cam_in, cam_out, pbuf)
-        end if
-
-        call calc_te_and_aam_budgets(state, 'pAM')
-        ! Restore pre-"physics_dme_adjust" tracers
-        state%q(:ncol,:pver,:pcnst) = tmp_trac(:ncol,:pver,:pcnst)
-        state%pdel(:ncol,:pver)     = tmp_pdel(:ncol,:pver)
-        state%ps(:ncol)             = tmp_ps(:ncol)
-      end if
-
-      if (dycore_is('LR') .or. dycore_is('FV3')) then
-        call physics_dme_adjust(state, tend, qini, ztodt)
-        call calc_te_and_aam_budgets(state, 'pAM')
+      else
+        !
+        ! for moist-mixing ratio based dycores
+        !
+        ! Note: this operation will NOT be reverted with set_wet_to_dry after set_dry_to_wet call
+        !
+        call set_dry_to_wet(state)
+        call physics_dme_adjust(state, tend, qini, totliqini, toticeini, ztodt)
+        call tot_energy_phys(state, 'phAM')
+        call tot_energy_phys(state, 'dyAM', vc=vc_dycore)
+      endif
+      if (vc_dycore == vc_height.or.vc_dycore == vc_dry_pressure) then
+        !
+        ! MPAS and SE specific scaling of temperature for enforcing energy consistency
+        ! (and to make sure that temperature dependent diagnostic tendencies
+        !  are computed correctly; e.g. dtcore)
+        !
+        scaling(1:ncol,:)  = cpairv(:ncol,:,lchnk)/cp_or_cv_dycore(:ncol,:,lchnk)
+        state%T(1:ncol,:)  = state%temp_ini(1:ncol,:)+&
+             scaling(1:ncol,:)*(state%T(1:ncol,:)-state%temp_ini(1:ncol,:))
+        tend%dtdt(:ncol,:) = scaling(:ncol,:)*tend%dtdt(:ncol,:)
+        !
+        ! else: do nothing for dycores with energy consistent with CAM physics
+        !
       end if
 
     else
       tmp_q     (:ncol,:pver) = 0.0_r8
       tmp_cldliq(:ncol,:pver) = 0.0_r8
       tmp_cldice(:ncol,:pver) = 0.0_r8
-      call calc_te_and_aam_budgets(state, 'pAM')
+      call tot_energy_phys(state, 'phAM')
+      call tot_energy_phys(state, 'dyAM',vc=vc_dycore)
     end if
 
     ! store T in buffer for use in computing dynamics T-tendency in next timestep
@@ -611,13 +690,15 @@ contains
     end do
 
     call diag_phys_tend_writeout (state, pbuf,  tend, ztodt,                  &
-         tmp_q, tmp_cldliq, tmp_cldice, qini, cldliqini, cldiceini)
+                                  qini, cldliqini, cldiceini)
 
     call diag_surf(cam_in, cam_out, state, pbuf)
 
     if (.not. moist_physics) then
       deallocate(cldliqini)
       deallocate(cldiceini)
+      deallocate(totliqini)
+      deallocate(toticeini)
     end if
 
   end subroutine tphysac
@@ -649,15 +730,19 @@ contains
     use time_manager,      only: get_nstep
     use check_energy,      only: check_energy_chng, check_energy_fix, check_energy_timestep_init
     use check_energy,      only: check_tracers_data, check_tracers_init, check_tracers_chng
-    use check_energy,      only: calc_te_and_aam_budgets
+    use check_energy,      only: tot_energy_phys
     use chemistry,         only: chem_is_active, chem_timestep_tend
     use held_suarez_cam,   only: held_suarez_tend
     use kessler_cam,       only: kessler_tend
     use tj2016_cam,        only: thatcher_jablonowski_precip_tend
+    use frierson_cam,      only: frierson_condensate_tend
+    use frierson_cam,      only: frierson_radiative_tend
     use dycore,            only: dycore_is
-    use cam_snapshot,      only: cam_snapshot_all_outfld
-    use cam_snapshot,      only: cam_snapshot_ptend_outfld
-
+    use cam_snapshot_common,only: cam_snapshot_all_outfld
+    use cam_snapshot_common,only: cam_snapshot_ptend_outfld
+    use physics_types,     only: dyn_te_idx
+    use air_composition, only: thermodynamic_active_species_liq_num,thermodynamic_active_species_liq_idx
+    use air_composition, only: thermodynamic_active_species_ice_num,thermodynamic_active_species_ice_idx
     ! Arguments
 
     real(r8),                  intent(in)    :: ztodt ! model time increment
@@ -678,12 +763,15 @@ contains
     integer                  :: itim_old
     integer                  :: ixcldliq
     integer                  :: ixcldice
+    integer                  :: m, m_cnst
 
     ! physics buffer fields for total energy and mass adjustment
     real(r8), pointer        :: teout(:)
     real(r8), pointer        :: qini(:,:)
     real(r8), pointer        :: cldliqini(:,:)
     real(r8), pointer        :: cldiceini(:,:)
+    real(r8), pointer        :: totliqini(:,:)
+    real(r8), pointer        :: toticeini(:,:)
     real(r8), pointer        :: dtcore(:,:)
 
     real(r8)                 :: zero(pcols) ! array of zeros
@@ -711,6 +799,8 @@ contains
     if (moist_physics) then
       call pbuf_get_field(pbuf, cldliqini_idx, cldliqini)
       call pbuf_get_field(pbuf, cldiceini_idx, cldiceini)
+      call pbuf_get_field(pbuf, totliqini_idx, totliqini)
+      call pbuf_get_field(pbuf, toticeini_idx, toticeini)
     end if
 
     ! Set accumulated physics tendencies to 0
@@ -735,11 +825,12 @@ contains
     !===================================================
     ! Global mean total energy fixer and AAM diagnostics
     !===================================================
-    call calc_te_and_aam_budgets(state, 'pBF')
+    call tot_energy_phys(state, 'phBF')
+    call tot_energy_phys(state, 'dyBF',vc=vc_dycore)
 
     call t_startf('energy_fixer')
 
-    if (adiabatic .and. (.not. dycore_is('EUL')) .and. (.not. dycore_is('MPAS'))) then
+    if (adiabatic .and. (.not. dycore_is('EUL'))) then
       call check_energy_fix(state, ptend, nstep, flx_heat)
       call physics_update(state, ptend, ztodt, tend)
       call check_energy_chng(state, tend, "chkengyfix", nstep, ztodt, zero, zero, zero, flx_heat)
@@ -748,7 +839,8 @@ contains
 
     call t_stopf('energy_fixer')
 
-    call calc_te_and_aam_budgets(state, 'pBP')
+    call tot_energy_phys(state, 'phBP')
+    call tot_energy_phys(state, 'dyBP',vc=vc_dycore)
 
     ! Save state for convective tendency calculations.
     call diag_conv_tend_ini(state, pbuf)
@@ -764,11 +856,20 @@ contains
       if (ixcldice > 0) then
         cldiceini(:ncol,:pver) = state%q(:ncol,:pver,ixcldice)
       end if
+      totliqini(:ncol,:pver) = 0.0_r8
+      do m_cnst=1,thermodynamic_active_species_liq_num
+        m = thermodynamic_active_species_liq_idx(m_cnst)
+        totliqini(:ncol,:pver) = totliqini(:ncol,:pver)+state%q(:ncol,:pver,m)
+      end do
+      toticeini(:ncol,:pver) = 0.0_r8
+      do m_cnst=1,thermodynamic_active_species_ice_num
+        m = thermodynamic_active_species_ice_idx(m_cnst)
+        toticeini(:ncol,:pver) = toticeini(:ncol,:pver)+state%q(:ncol,:pver,m)
+      end do
     end if
-
     call outfld('TEOUT', teout       , pcols, lchnk   )
-    call outfld('TEINP', state%te_ini, pcols, lchnk   )
-    call outfld('TEFIX', state%te_cur, pcols, lchnk   )
+    call outfld('TEINP', state%te_ini(:,dyn_te_idx), pcols, lchnk   )
+    call outfld('TEFIX', state%te_cur(:,dyn_te_idx), pcols, lchnk   )
 
     ! T tendency due to dynamics
     if( nstep > dyn_time_lvls-1 ) then
@@ -830,6 +931,37 @@ contains
        if (trim(cam_take_snapshot_after) == "thatcher_jablonowski_precip_tend") then
           call cam_snapshot_all_outfld(cam_snapshot_after_num, state, tend, cam_in, cam_out, pbuf)
        end if
+    else if (frierson_phys) then
+       ! Compute the large-scale precipitation
+       !----------------------------------------
+       if (trim(cam_take_snapshot_before) == "frierson_condensate_tend") then
+          call cam_snapshot_all_outfld(cam_snapshot_before_num, state, tend, cam_in, cam_out, pbuf)
+       end if
+       call frierson_condensate_tend(state, ptend, ztodt, pbuf)
+       if ( (trim(cam_take_snapshot_after) == "frierson_condensate_tend") .and. &
+            (trim(cam_take_snapshot_before) == trim(cam_take_snapshot_after))) then
+          call cam_snapshot_ptend_outfld(ptend, lchnk)
+       end if
+       call physics_update(state, ptend, ztodt, tend)
+       if (trim(cam_take_snapshot_after) == "frierson_condensate_tend") then
+          call cam_snapshot_all_outfld(cam_snapshot_after_num, state, tend, cam_in, cam_out, pbuf)
+       end if
+
+       ! Compute the radiative tendencies
+       !-----------------------------------
+       if (trim(cam_take_snapshot_before) == "frierson_radiative_tend") then
+          call cam_snapshot_all_outfld(cam_snapshot_before_num, state, tend, cam_in, cam_out, pbuf)
+       end if
+       call frierson_radiative_tend(state, ptend, ztodt, cam_in, cam_out)
+       if ( (trim(cam_take_snapshot_after) == "frierson_radiative_tend") .and. &
+            (trim(cam_take_snapshot_before) == trim(cam_take_snapshot_after))) then
+          call cam_snapshot_ptend_outfld(ptend, lchnk)
+       end if
+       call physics_update(state, ptend, ztodt, tend)
+       if (trim(cam_take_snapshot_after) == "frierson_radiative_tend") then
+          call cam_snapshot_all_outfld(cam_snapshot_after_num, state, tend, cam_in, cam_out, pbuf)
+       end if
+
     end if
 
     ! Can't turn on conservation error messages unless the appropriate heat
@@ -871,7 +1003,7 @@ contains
     call t_stopf('bc_history_write')
 
     ! Save total enery after physics for energy conservation checks
-    teout = state%te_cur
+    teout = state%te_cur(:,dyn_te_idx)
 
     call cam_export(state, cam_out, pbuf)
 
@@ -889,6 +1021,7 @@ contains
     !--------------------------------------------------------------------------
     use physics_types,       only: physics_state
     use physics_buffer,      only: physics_buffer_desc
+    use nudging,             only: Nudge_Model, nudging_timestep_init
 
     implicit none
 
@@ -899,6 +1032,10 @@ contains
     type(physics_buffer_desc), pointer                 :: pbuf2d(:,:)
 
     !--------------------------------------------------------------------------
+
+    ! Update Nudging values, if needed
+    !----------------------------------
+    if(Nudge_Model) call nudging_timestep_init(phys_state)
 
   end subroutine phys_timestep_init
 

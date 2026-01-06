@@ -15,7 +15,6 @@ module dimensions_mod
 #else
   integer, parameter         :: ntrac_d = 0 ! No fvm tracers if CSLAM is off
 #endif
-
   !
   ! The variables below hold indices of water vapor and condensate loading tracers as well as
   ! associated heat capacities (initialized in dyn_init):
@@ -31,25 +30,15 @@ module dimensions_mod
   !
   character(len=16),  allocatable, public :: cnst_name_gll(:)     ! constituent names for SE tracers
   character(len=128), allocatable, public :: cnst_longname_gll(:) ! long name of SE tracers
-  !
-  !moist cp in energy conversion term
-  !
-  ! .false.: force dycore to use cpd (cp dry) instead of moist cp
-  ! .true. : use moist cp in dycore
-  !
-  logical           , public :: lcp_moist = .true. 
- 
+
   integer, parameter, public :: np = NP
   integer, parameter, public :: nc = 3       !cslam resolution
   integer           , public :: fv_nphys !physics-grid resolution - the "MAX" is so that the code compiles with NC=0
 
-  integer         :: ntrac = 0 !ntrac is set in dyn_comp
-  integer         :: qsize = 0 !qsize is set in dyn_comp
+  integer         :: ntrac = 0           !ntrac is set in dyn_comp
+  logical, public :: use_cslam = .false. !logical for CSLAM
+  integer         :: qsize = 0           !qsize is set in dyn_comp
   !
-  ! hyperviscosity is applied on approximate pressure levels
-  ! Similar to CAM-EUL; see CAM5 scietific documentation (Note TN-486), equation (3.09), page 58.
-  ! 
-  logical,            public :: hypervis_dynamic_ref_state = .false.  
   ! fvm dimensions:
   logical, public :: lprint!for debugging
   integer, parameter, public :: ngpc=3          !number of Gausspoints for the fvm integral approximation   !phl change from 4
@@ -73,8 +62,8 @@ module dimensions_mod
   integer, allocatable, public :: kord_tr(:), kord_tr_cslam(:)
   
   real(r8), public :: nu_scale_top(PLEV)! scaling of del2 viscosity in sopnge layer (initialized in dyn_comp)
-  real(r8), public :: nu_lev(PLEV)    
-  real(r8), public :: otau(PLEV)
+  real(r8), public :: nu_lev(PLEV)      ! level dependent del4 (u,v) damping
+  real(r8), public :: nu_t_lev(PLEV)    ! level depedendet del4 T damping
   integer,  public :: ksponge_end       ! sponge is active k=1,ksponge_end
   real(r8), public :: nu_div_lev(PLEV) = 1.0_r8 ! scaling of viscosity in sponge layer
                                                       ! (set in prim_state; if applicable)
@@ -84,7 +73,6 @@ module dimensions_mod
   real(r8), public :: km_sponge_factor(PLEV) !scaling for molecular diffusion (when used as sponge)
   real(r8), public :: kmvisi_ref(PLEV+1)        !reference profiles for molecular diffusion 
   real(r8), public :: kmcndi_ref(PLEV+1)        !reference profiles for molecular diffusion  
-  real(r8), public :: rhoi_ref(PLEV+1)          !reference profiles for rho
 
 
   integer,  public :: nhc_phys 

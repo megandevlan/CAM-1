@@ -5,9 +5,10 @@ module physics_types
 
   use shr_kind_mod,     only: r8 => shr_kind_r8
   use ppgrid,           only: pcols, pver
-  use constituents,     only: pcnst, qmin, cnst_name
-  use geopotential,     only: geopotential_dse, geopotential_t
-  use physconst,        only: zvir, gravit, cpair, rair, cpairv, rairv
+  use constituents,     only: pcnst, qmin, cnst_name, cnst_get_ind
+  use geopotential,     only: geopotential_t
+  use physconst,        only: zvir, gravit, cpair, rair
+  use air_composition,  only: cpairv, rairv
   use phys_grid,        only: get_ncols_p, get_rlon_all_p, get_rlat_all_p, get_gcol_all_p
   use cam_logfile,      only: iulog
   use cam_abortutils,   only: endrun
@@ -16,8 +17,6 @@ module physics_types
 
   implicit none
   private          ! Make default type private to the module
-
-  logical, parameter :: adjust_te = .FALSE.
 
 ! Public types:
 
@@ -52,7 +51,11 @@ module physics_types
   public physics_ptend_alloc   ! allocate individual components within tend
   public physics_ptend_dealloc ! deallocate individual components within tend
 
+  public physics_cnst_limit ! apply limiters to constituents (waccmx)
 !-------------------------------------------------------------------------------
+  integer, parameter, public :: phys_te_idx = 1
+  integer ,parameter, public :: dyn_te_idx = 2
+
   type physics_state
      integer                                     :: &
           lchnk,                &! chunk index
@@ -88,17 +91,22 @@ module physics_types
           q         ! constituent mixing ratio (kg/kg moist or dry air depending on type)
 
      real(r8), dimension(:,:),allocatable        :: &
-          pint,    &! interface pressure (Pa)
-          pintdry, &! interface pressure dry (Pa)
-          lnpint,  &! ln(pint)
+          pint,     &! interface pressure (Pa)
+          pintdry,  &! interface pressure dry (Pa)
+          lnpint,   &! ln(pint)
           lnpintdry,&! log interface pressure dry (Pa)
-          zi        ! geopotential height above surface at interfaces (m)
+          zi         ! geopotential height above surface at interfaces (m)
 
-     real(r8), dimension(:),allocatable          :: &
-          te_ini,  &! vertically integrated total (kinetic + static) energy of initial state
-          te_cur,  &! vertically integrated total (kinetic + static) energy of current state
-          tw_ini,  &! vertically integrated total water of initial state
-          tw_cur    ! vertically integrated total water of new state
+     real(r8), dimension(:,:),allocatable          :: &
+                           ! Second dimension is (phys_te_idx) CAM physics total energy and
+                           ! (dyn_te_idx) dycore total energy computed in physics
+          te_ini,         &! vertically integrated total (kinetic + static) energy of initial state
+          te_cur,         &! vertically integrated total (kinetic + static) energy of current state
+          tw_ini,         &! vertically integrated total water of initial state
+          tw_cur           ! vertically integrated total water of new state
+     real(r8), dimension(:,:),allocatable          :: &
+          temp_ini,       &! Temperature of initial state (used for energy computations)
+          z_ini            ! Height of initial state (used for energy computations)
      integer :: count ! count of values with significant energy or water imbalances
      integer, dimension(:),allocatable           :: &
           latmapback, &! map from column to unique lat for that column
@@ -200,11 +208,11 @@ contains
 !-----------------------------------------------------------------------
 ! Update the state and or tendency structure with the parameterization tendencies
 !-----------------------------------------------------------------------
-    use constituents, only: cnst_get_ind
-    use scamMod,      only: scm_crm_mode, single_column
-    use phys_control, only: phys_getopts
-    use physconst,    only: physconst_update ! Routine which updates physconst variables (WACCM-X)
-    use qneg_module,  only: qneg3
+    use scamMod,         only: scm_crm_mode, single_column
+    use phys_control,    only: phys_getopts
+    use cam_thermo,      only: cam_thermo_dry_air_update ! Routine which updates physconst variables (WACCM-X)
+    use air_composition, only: dry_air_species_num
+    use qneg_module   ,  only: qneg3
 
 !------------------------------Arguments--------------------------------
     type(physics_ptend), intent(inout)  :: ptend   ! Parameterization tendencies
@@ -366,11 +374,10 @@ contains
     end if
 
     !------------------------------------------------------------------------
-    ! Get indices for molecular weights and call WACCM-X physconst_update
+    ! Get indices for molecular weights and call WACCM-X cam_thermo_update
     !------------------------------------------------------------------------
-    if ( waccmx_is('ionosphere') .or. waccmx_is('neutral') ) then
-       call physconst_update(state%q, state%t, state%lchnk, state%ncol, &
-                             to_moist_factor=state%pdeldry(:ncol,:)/state%pdel(:ncol,:) )
+    if (dry_air_species_num>0) then
+      call cam_thermo_dry_air_update(state%q, state%t, state%lchnk, state%ncol)
     endif
 
     !-----------------------------------------------------------------------
@@ -417,7 +424,7 @@ contains
     if (ptend%ls .or. ptend%lq(1)) then
        call geopotential_t  (                                                                    &
             state%lnpint, state%lnpmid, state%pint  , state%pmid  , state%pdel  , state%rpdel  , &
-            state%t     , state%q(:,:,1), rairv_loc(:,:), gravit  , zvirv              , &
+            state%t     , state%q(:,:,:), rairv_loc(:,:), gravit  , zvirv              , &
             state%zi    , state%zm      , ncol         )
        ! update dry static energy for use in next process
        do k = ptend%top_level, ptend%bot_level
@@ -526,14 +533,18 @@ contains
          varname="state%psdry",     msg=msg)
     call shr_assert_in_domain(state%phis(:ncol),        is_nan=.false., &
          varname="state%phis",      msg=msg)
-    call shr_assert_in_domain(state%te_ini(:ncol),      is_nan=.false., &
+    call shr_assert_in_domain(state%te_ini(:ncol,:),    is_nan=.false., &
          varname="state%te_ini",    msg=msg)
-    call shr_assert_in_domain(state%te_cur(:ncol),      is_nan=.false., &
+    call shr_assert_in_domain(state%te_cur(:ncol,:),    is_nan=.false., &
          varname="state%te_cur",    msg=msg)
-    call shr_assert_in_domain(state%tw_ini(:ncol),      is_nan=.false., &
+    call shr_assert_in_domain(state%tw_ini(:ncol,:),    is_nan=.false., &
          varname="state%tw_ini",    msg=msg)
-    call shr_assert_in_domain(state%tw_cur(:ncol),      is_nan=.false., &
+    call shr_assert_in_domain(state%tw_cur(:ncol,:),    is_nan=.false., &
          varname="state%tw_cur",    msg=msg)
+    call shr_assert_in_domain(state%temp_ini(:ncol,:),  is_nan=.false., &
+         varname="state%temp_ini",  msg=msg)
+    call shr_assert_in_domain(state%z_ini(:ncol,:),  is_nan=.false., &
+         varname="state%z_ini",  msg=msg)
 
     ! 2-D variables (at midpoints)
     call shr_assert_in_domain(state%t(:ncol,:),         is_nan=.false., &
@@ -600,14 +611,18 @@ contains
          varname="state%psdry",     msg=msg)
     call shr_assert_in_domain(state%phis(:ncol),        lt=posinf_r8, gt=neginf_r8, &
          varname="state%phis",      msg=msg)
-    call shr_assert_in_domain(state%te_ini(:ncol),      lt=posinf_r8, gt=neginf_r8, &
+    call shr_assert_in_domain(state%te_ini(:ncol,:),    lt=posinf_r8, gt=neginf_r8, &
          varname="state%te_ini",    msg=msg)
-    call shr_assert_in_domain(state%te_cur(:ncol),      lt=posinf_r8, gt=neginf_r8, &
+    call shr_assert_in_domain(state%te_cur(:ncol,:),    lt=posinf_r8, gt=neginf_r8, &
          varname="state%te_cur",    msg=msg)
-    call shr_assert_in_domain(state%tw_ini(:ncol),      lt=posinf_r8, gt=neginf_r8, &
+    call shr_assert_in_domain(state%tw_ini(:ncol,:),    lt=posinf_r8, gt=neginf_r8, &
          varname="state%tw_ini",    msg=msg)
-    call shr_assert_in_domain(state%tw_cur(:ncol),      lt=posinf_r8, gt=neginf_r8, &
+    call shr_assert_in_domain(state%tw_cur(:ncol,:),    lt=posinf_r8, gt=neginf_r8, &
          varname="state%tw_cur",    msg=msg)
+    call shr_assert_in_domain(state%temp_ini(:ncol,:),  lt=posinf_r8, gt=neginf_r8, &
+         varname="state%temp_ini",  msg=msg)
+    call shr_assert_in_domain(state%z_ini(:ncol,:),  lt=posinf_r8, gt=neginf_r8, &
+         varname="state%z_ini",  msg=msg)
 
     ! 2-D variables (at midpoints)
     call shr_assert_in_domain(state%t(:ncol,:),         lt=posinf_r8, gt=0._r8, &
@@ -1122,7 +1137,63 @@ end subroutine physics_ptend_copy
   end subroutine init_geo_unique
 
 !===============================================================================
-  subroutine physics_dme_adjust(state, tend, qini, dt)
+  subroutine physics_cnst_limit(state)
+    type(physics_state), intent(inout) :: state
+
+    integer :: i,k, ncol
+
+    real(r8) :: mmrSum_O_O2_H                ! Sum of mass mixing ratios for O, O2, and H
+    real(r8), parameter :: mmrMin=1.e-20_r8  ! lower limit of o2, o, and h mixing ratios
+    real(r8), parameter :: N2mmrMin=1.e-6_r8 ! lower limit of N2 mass mixing ratio
+    real(r8), parameter :: H2lim=6.e-5_r8    ! H2 limiter: 10x global H2 MMR (Roble, 1995)
+    integer :: ixo, ixo2, ixh, ixh2
+
+    if ( waccmx_is('ionosphere') .or. waccmx_is('neutral') ) then
+       call cnst_get_ind('O', ixo)
+       call cnst_get_ind('O2', ixo2)
+       call cnst_get_ind('H', ixh)
+       call cnst_get_ind('H2', ixh2)
+
+       ncol = state%ncol
+
+       !------------------------------------------------------------
+       ! Ensure N2 = 1-(O2 + O + H) mmr is greater than 0
+       ! Check for unusually large H2 values and set to lower value.
+       !------------------------------------------------------------
+
+       do k=1,pver
+          do i=1,ncol
+
+             if (state%q(i,k,ixo) < mmrMin) state%q(i,k,ixo) = mmrMin
+             if (state%q(i,k,ixo2) < mmrMin) state%q(i,k,ixo2) = mmrMin
+
+             mmrSum_O_O2_H = state%q(i,k,ixo)+state%q(i,k,ixo2)+state%q(i,k,ixh)
+
+             if ((1._r8-mmrMin-mmrSum_O_O2_H) < 0._r8) then
+
+                state%q(i,k,ixo) = state%q(i,k,ixo) * (1._r8 - N2mmrMin) / mmrSum_O_O2_H
+
+                state%q(i,k,ixo2) = state%q(i,k,ixo2) * (1._r8 - N2mmrMin) / mmrSum_O_O2_H
+
+                state%q(i,k,ixh) = state%q(i,k,ixh) * (1._r8 - N2mmrMin) / mmrSum_O_O2_H
+
+             endif
+
+             if(state%q(i,k,ixh2) > H2lim) then
+                state%q(i,k,ixh2) = H2lim
+             endif
+
+          end do
+       end do
+
+    end if
+  end subroutine physics_cnst_limit
+
+!===============================================================================
+  subroutine physics_dme_adjust(state, tend, qini, liqini, iceini, dt)
+    use air_composition, only: dry_air_species_num,thermodynamic_active_species_num
+    use air_composition, only: thermodynamic_active_species_idx
+    use dycore,          only: dycore_is
     !-----------------------------------------------------------------------
     !
     ! Purpose: Adjust the dry mass in each layer back to the value of physics input state
@@ -1154,6 +1225,8 @@ end subroutine physics_ptend_copy
     type(physics_state), intent(inout) :: state
     type(physics_tend ), intent(inout) :: tend
     real(r8),            intent(in   ) :: qini(pcols,pver)    ! initial specific humidity
+    real(r8),            intent(in   ) :: liqini(pcols,pver)  ! initial total liquid
+    real(r8),            intent(in   ) :: iceini(pcols,pver)  ! initial total ice
     real(r8),            intent(in   ) :: dt                  ! model physics timestep
     !
     !---------------------------Local workspace-----------------------------
@@ -1168,15 +1241,17 @@ end subroutine physics_ptend_copy
 
     real(r8) :: zvirv(pcols,pver)    ! Local zvir array pointer
 
+    real(r8) :: tot_water (pcols,2)  ! total water (initial, present)
+    real(r8) :: tot_water_chg(pcols) ! total water change
+
+
     real(r8),allocatable :: cpairv_loc(:,:)
+    integer :: m_cnst
     !
     !-----------------------------------------------------------------------
 
     if (state%psetcols .ne. pcols) then
        call endrun('physics_dme_adjust: cannot pass in a state which has sub-columns')
-    end if
-    if (adjust_te) then
-       call endrun('physics_dme_adjust: must update code based on the "correct" energy before turning on "adjust_te"')
     end if
 
     lchnk = state%lchnk
@@ -1185,76 +1260,57 @@ end subroutine physics_ptend_copy
     ! adjust dry mass in each layer back to input value, while conserving
     ! constituents, momentum, and total energy
     state%ps(:ncol) = state%pint(:ncol,1)
-    do k = 1, pver
 
-       ! adjusment factor is just change in water vapor
-       fdq(:ncol) = 1._r8 + state%q(:ncol,k,1) - qini(:ncol,k)
-
-       ! adjust constituents to conserve mass in each layer
-       do m = 1, pcnst
+    !
+    ! original code for backwards compatability with FV and EUL
+    !
+    if (.not.(dycore_is('MPAS') .or. dycore_is('SE'))) then
+      do k = 1, pver
+        
+        ! adjusment factor is just change in water vapor
+        fdq(:ncol) = 1._r8 + state%q(:ncol,k,1) - qini(:ncol,k)
+        
+        ! adjust constituents to conserve mass in each layer
+        do m = 1, pcnst
           state%q(:ncol,k,m) = state%q(:ncol,k,m) / fdq(:ncol)
-       end do
-
-       if (adjust_te) then
-          ! compute specific total energy of unadjusted state (J/kg)
-          te(:ncol) = state%s(:ncol,k) + 0.5_r8*(state%u(:ncol,k)**2 + state%v(:ncol,k)**2)
-
-          ! recompute initial u,v from the new values and the tendencies
-          utmp(:ncol) = state%u(:ncol,k) - dt * tend%dudt(:ncol,k)
-          vtmp(:ncol) = state%v(:ncol,k) - dt * tend%dvdt(:ncol,k)
-          ! adjust specific total energy and specific momentum (velocity) to conserve each
-          te     (:ncol)   = te     (:ncol)     / fdq(:ncol)
-          state%u(:ncol,k) = state%u(:ncol,k  ) / fdq(:ncol)
-          state%v(:ncol,k) = state%v(:ncol,k  ) / fdq(:ncol)
-          ! compute adjusted u,v tendencies
-          tend%dudt(:ncol,k) = (state%u(:ncol,k) - utmp(:ncol)) / dt
-          tend%dvdt(:ncol,k) = (state%v(:ncol,k) - vtmp(:ncol)) / dt
-
-          ! compute adjusted static energy
-          state%s(:ncol,k) = te(:ncol) - 0.5_r8*(state%u(:ncol,k)**2 + state%v(:ncol,k)**2)
-       end if
-
-! compute new total pressure variables
-       state%pdel  (:ncol,k  ) = state%pdel(:ncol,k  ) * fdq(:ncol)
-       state%ps(:ncol)         = state%ps(:ncol)       + state%pdel(:ncol,k)
-       state%pint  (:ncol,k+1) = state%pint(:ncol,k  ) + state%pdel(:ncol,k)
-       state%lnpint(:ncol,k+1) = log(state%pint(:ncol,k+1))
-       state%rpdel (:ncol,k  ) = 1._r8/ state%pdel(:ncol,k  )
-    end do
-
+        end do
+        ! compute new total pressure variables
+        state%pdel  (:ncol,k  ) = state%pdel(:ncol,k  ) * fdq(:ncol)
+        state%ps(:ncol)         = state%ps(:ncol)       + state%pdel(:ncol,k)
+        state%pint  (:ncol,k+1) = state%pint(:ncol,k  ) + state%pdel(:ncol,k)
+        state%lnpint(:ncol,k+1) = log(state%pint(:ncol,k+1))
+        state%rpdel (:ncol,k  ) = 1._r8/ state%pdel(:ncol,k  )
+      end do
+    else
+      do k = 1, pver
+        tot_water(:ncol,1) = qini(:ncol,k) +liqini(:ncol,k)+iceini(:ncol,k) !initial total H2O
+        tot_water(:ncol,2) = 0.0_r8
+        do m_cnst=dry_air_species_num+1,thermodynamic_active_species_num
+          m = thermodynamic_active_species_idx(m_cnst)
+          tot_water(:ncol,2) = tot_water(:ncol,2)+state%q(:ncol,k,m)
+        end do
+        fdq(:ncol) = 1._r8 + tot_water(:ncol,2) - tot_water(:ncol,1)
+        ! adjust constituents to conserve mass in each layer
+        do m = 1, pcnst
+          state%q(:ncol,k,m) = state%q(:ncol,k,m) / fdq(:ncol)
+        end do
+        ! compute new total pressure variables
+        state%pdel  (:ncol,k  ) = state%pdel(:ncol,k  ) * fdq(:ncol)
+        state%ps(:ncol)         = state%ps(:ncol)       + state%pdel(:ncol,k)
+        state%pint  (:ncol,k+1) = state%pint(:ncol,k  ) + state%pdel(:ncol,k)
+        state%lnpint(:ncol,k+1) = log(state%pint(:ncol,k+1))
+        state%rpdel (:ncol,k  ) = 1._r8/ state%pdel(:ncol,k  )
+        !note that mid-level variables (e.g. pmid) are not recomputed
+      end do
+    endif
     if ( waccmx_is('ionosphere') .or. waccmx_is('neutral') ) then
       zvirv(:,:) = shr_const_rwv / rairv(:,:,state%lchnk) - 1._r8
     else
       zvirv(:,:) = zvir
     endif
 
-! compute new T,z from new s,q,dp
-    if (adjust_te) then
-
-! cpairv_loc needs to be allocated to a size which matches state and ptend
-! If psetcols == pcols, cpairv is the correct size and just copy into cpairv_loc
-! If psetcols > pcols and all cpairv match cpair, then assign the constant cpair
-
-       allocate(cpairv_loc(state%psetcols,pver))
-       if (state%psetcols == pcols) then
-          cpairv_loc(:,:) = cpairv(:,:,state%lchnk)
-       else if (state%psetcols > pcols .and. all(cpairv(:,:,:) == cpair)) then
-          cpairv_loc(:,:) = cpair
-       else
-          call endrun('physics_dme_adjust: cpairv is not allowed to vary when subcolumns are turned on')
-       end if
-
-       call geopotential_dse(state%lnpint, state%lnpmid, state%pint,  &
-            state%pmid  , state%pdel    , state%rpdel,  &
-            state%s     , state%q(:,:,1), state%phis , rairv(:,:,state%lchnk), &
-            gravit, cpairv_loc(:,:), zvirv, &
-            state%t     , state%zi      , state%zm   , ncol)
-
-       deallocate(cpairv_loc)
-
-    end if
-
   end subroutine physics_dme_adjust
+
 !-----------------------------------------------------------------------
 
 !===============================================================================
@@ -1288,18 +1344,20 @@ end subroutine physics_ptend_copy
     state_out%count    = state_in%count
 
     do i = 1, ncol
-       state_out%lat(i)    = state_in%lat(i)
-       state_out%lon(i)    = state_in%lon(i)
-       state_out%ps(i)     = state_in%ps(i)
-       state_out%phis(i)   = state_in%phis(i)
-       state_out%te_ini(i) = state_in%te_ini(i)
-       state_out%te_cur(i) = state_in%te_cur(i)
-       state_out%tw_ini(i) = state_in%tw_ini(i)
-       state_out%tw_cur(i) = state_in%tw_cur(i)
-    end do
+       state_out%lat(i)      = state_in%lat(i)
+       state_out%lon(i)      = state_in%lon(i)
+       state_out%ps(i)       = state_in%ps(i)
+       state_out%phis(i)     = state_in%phis(i)
+     end do
+     state_out%te_ini(:ncol,:) = state_in%te_ini(:ncol,:)
+     state_out%te_cur(:ncol,:) = state_in%te_cur(:ncol,:)
+     state_out%tw_ini(:ncol,:) = state_in%tw_ini(:ncol,:)
+     state_out%tw_cur(:ncol,:) = state_in%tw_cur(:ncol,:)
 
     do k = 1, pver
        do i = 1, ncol
+          state_out%temp_ini(i,k)  = state_in%temp_ini(i,k)
+          state_out%z_ini(i,k)     = state_in%z_ini(i,k)
           state_out%t(i,k)         = state_in%t(i,k)
           state_out%u(i,k)         = state_in%u(i,k)
           state_out%v(i,k)         = state_in%v(i,k)
@@ -1465,7 +1523,7 @@ end subroutine set_dry_to_wet
 
 subroutine physics_state_alloc(state,lchnk,psetcols)
 
-  use infnan, only : inf, assignment(=)
+  use infnan,     only: inf, assignment(=)
 
 ! allocate the individual state components
 
@@ -1571,17 +1629,23 @@ subroutine physics_state_alloc(state,lchnk,psetcols)
   allocate(state%zi(psetcols,pver+1), stat=ierr)
   if ( ierr /= 0 ) call endrun('physics_state_alloc error: allocation error for state%zi')
 
-  allocate(state%te_ini(psetcols), stat=ierr)
+  allocate(state%te_ini(psetcols,2), stat=ierr)
   if ( ierr /= 0 ) call endrun('physics_state_alloc error: allocation error for state%te_ini')
 
-  allocate(state%te_cur(psetcols), stat=ierr)
+  allocate(state%te_cur(psetcols,2), stat=ierr)
   if ( ierr /= 0 ) call endrun('physics_state_alloc error: allocation error for state%te_cur')
 
-  allocate(state%tw_ini(psetcols), stat=ierr)
+  allocate(state%tw_ini(psetcols,2), stat=ierr)
   if ( ierr /= 0 ) call endrun('physics_state_alloc error: allocation error for state%tw_ini')
 
-  allocate(state%tw_cur(psetcols), stat=ierr)
+  allocate(state%tw_cur(psetcols,2), stat=ierr)
   if ( ierr /= 0 ) call endrun('physics_state_alloc error: allocation error for state%tw_cur')
+
+  allocate(state%temp_ini(psetcols,pver), stat=ierr)
+  if ( ierr /= 0 ) call endrun('physics_state_alloc error: allocation error for state%temp_ini')
+
+  allocate(state%z_ini(psetcols,pver), stat=ierr)
+  if ( ierr /= 0 ) call endrun('physics_state_alloc error: allocation error for state%z_ini')
 
   allocate(state%latmapback(psetcols), stat=ierr)
   if ( ierr /= 0 ) call endrun('physics_state_alloc error: allocation error for state%latmapback')
@@ -1622,10 +1686,12 @@ subroutine physics_state_alloc(state,lchnk,psetcols)
   state%lnpintdry(:,:) = inf
   state%zi(:,:) = inf
 
-  state%te_ini(:) = inf
-  state%te_cur(:) = inf
-  state%tw_ini(:) = inf
-  state%tw_cur(:) = inf
+  state%te_ini(:,:) = inf
+  state%te_cur(:,:) = inf
+  state%tw_ini(:,:) = inf
+  state%tw_cur(:,:) = inf
+  state%temp_ini(:,:) = inf
+  state%z_ini(:,:)  = inf
 
 end subroutine physics_state_alloc
 
@@ -1733,6 +1799,12 @@ subroutine physics_state_dealloc(state)
 
   deallocate(state%tw_cur, stat=ierr)
   if ( ierr /= 0 ) call endrun('physics_state_dealloc error: deallocation error for state%tw_cur')
+
+  deallocate(state%temp_ini, stat=ierr)
+  if ( ierr /= 0 ) call endrun('physics_state_dealloc error: deallocation error for state%temp_ini')
+
+  deallocate(state%z_ini, stat=ierr)
+  if ( ierr /= 0 ) call endrun('physics_state_dealloc error: deallocation error for state%z_ini')
 
   deallocate(state%latmapback, stat=ierr)
   if ( ierr /= 0 ) call endrun('physics_state_dealloc error: deallocation error for state%latmapback')

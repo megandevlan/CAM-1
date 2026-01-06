@@ -463,7 +463,12 @@ subroutine dyn_init(dyn_in, dyn_out)
 
    ! Initialize FV dynamical core state variables
 
-   use physconst,       only: pi, omega, rearth, rair, cpair, zvir
+   use physconst,       only: omega, rearth, rair, cpair, zvir
+   use air_composition, only: thermodynamic_active_species_idx
+   use air_composition, only: thermodynamic_active_species_idx_dycore
+   use air_composition, only: thermodynamic_active_species_liq_idx,thermodynamic_active_species_ice_idx
+   use air_composition, only: thermodynamic_active_species_liq_idx_dycore,thermodynamic_active_species_ice_idx_dycore
+   use air_composition, only: thermodynamic_active_species_liq_num, thermodynamic_active_species_ice_num
    use infnan,          only: inf, assignment(=)
 
    use constituents,    only: pcnst, cnst_name, cnst_longname, tottnam, cnst_get_ind
@@ -475,6 +480,7 @@ subroutine dyn_init(dyn_in, dyn_out)
 #endif
    use ctem,            only: ctem_init
    use diag_module,     only: fv_diag_init
+   use dyn_tests_utils, only: vc_dycore, vc_moist_pressure, string_vc, vc_str_lgth
 
    ! arguments:
    type (dyn_import_t),     intent(out) :: dyn_in
@@ -497,8 +503,13 @@ subroutine dyn_init(dyn_in, dyn_out)
    integer :: budget_hfile_num
 
    character(len=*), parameter :: sub='dyn_init'
+   character (len=vc_str_lgth) :: vc_str
    !----------------------------------------------------------------------------
-
+   vc_dycore = vc_moist_pressure
+   if (masterproc) then
+     call string_vc(vc_dycore,vc_str)
+     write(iulog,*) sub//': vertical coordinate dycore   : ',trim(vc_str)
+   end if
    dyn_state => get_dyn_state()
    grid      => dyn_state%grid
    constants => dyn_state%constants
@@ -688,6 +699,20 @@ subroutine dyn_init(dyn_in, dyn_out)
       call add_default('TTEND   '       , budget_hfile_num, ' ')
    end if
 
+   thermodynamic_active_species_idx_dycore(:) = thermodynamic_active_species_idx(:)
+   do m=1,thermodynamic_active_species_liq_num
+     thermodynamic_active_species_liq_idx_dycore(m) = thermodynamic_active_species_liq_idx(m)
+     if (masterproc) then
+       write(iulog,*) sub//": m,thermodynamic_active_species_idx_liq_dycore: ",m,thermodynamic_active_species_liq_idx_dycore(m)
+     end if
+   end do
+   do m=1,thermodynamic_active_species_ice_num
+     thermodynamic_active_species_ice_idx_dycore(m) = thermodynamic_active_species_ice_idx(m)
+     if (masterproc) then
+       write(iulog,*) sub//": m,thermodynamic_active_species_idx_ice_dycore: ",m,thermodynamic_active_species_ice_idx_dycore(m)
+     end if
+   end do
+
 end subroutine dyn_init
 
 !=============================================================================================
@@ -822,23 +847,23 @@ subroutine dyn_run(ptop, ndt, te0, dyn_state, dyn_in, dyn_out, rc)
    use metdata, only: met_fix_mass
 
    use shr_reprosum_mod, only: shr_reprosum_calc
-   use physconst,        only: physconst_calc_kappav
+   use cam_thermo,       only: cam_thermo_calc_kappav
 
 #if defined( SPMD )
 #include "mpif.h"
 #endif
 
    ! arguments
-   real(r8),            intent(in)  :: ptop      ! Pressure at model top (interface pres)
-   integer,             intent(in)  :: ndt       ! the large time step in seconds
-                                                 ! Also the mapping time step in this setup
+   real(r8),            intent(in)    :: ptop      ! Pressure at model top (interface pres)
+   integer,             intent(in)    :: ndt       ! the large time step in seconds
+                                                   ! Also the mapping time step in this setup
 
-   real(r8),            intent(out) :: te0       ! Total energy before dynamics
-   type (T_FVDYCORE_STATE), target  :: dyn_state ! Internal state
-   type (dyn_import_t)              :: dyn_in    ! Import container
-   type (dyn_export_t)              :: dyn_out   ! Export container
+   real(r8),            intent(out)   :: te0       ! Total energy before dynamics
+   type (T_FVDYCORE_STATE), target    :: dyn_state ! Internal state
+   type (dyn_import_t), intent(in)    :: dyn_in    ! Import container
+   type (dyn_export_t), intent(inout) :: dyn_out   ! Export container
 
-   integer,             intent(out) :: rc        ! Return code
+   integer,             intent(out)   :: rc        ! Return code
 
    integer, parameter  ::  DYN_RUN_SUCCESS           = 0
    integer, parameter  ::  DYN_RUN_FAILURE           = -1
@@ -1225,7 +1250,7 @@ subroutine dyn_run(ptop, ndt, te0, dyn_state, dyn_in, dyn_out, rc)
 #endif
 
    if (high_alt) then
-      call physconst_calc_kappav(ifirstxy,ilastxy,jfirstxy,jlastxy,1,km, grid%ntotq, tracer, cap3v, cpv=cp3v )
+      call cam_thermo_calc_kappav( tracer, cap3v, cpv=cp3v )
    else
       cp3v  = cp
       cp3vc = cp
@@ -2417,7 +2442,7 @@ subroutine dyn_run(ptop, ndt, te0, dyn_state, dyn_in, dyn_out, rc)
                ! These updates of cp3vc, cap3vc etc are currently not passed back to physics.
                ! This update is put here, after the transpose of pexy to pe, since we need pe (on yz decomp).
 
-               call physconst_calc_kappav(1,im,jfirst,jlast,kfirst,klast, grid%ntotq, q_internal, cap3vc )
+               call cam_thermo_calc_kappav( q_internal, cap3vc )
 
 !$omp parallel do private(i,j,k)
                do k = kfirst,klast

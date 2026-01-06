@@ -109,8 +109,9 @@ CONTAINS
   !  to prevent repeated allocation/initialization
   !
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    use physconst,      only: cappa, dry_air_species_num,thermodynamic_active_species_num
-    use physconst,      only: thermodynamic_active_species_idx_dycore    
+    use physconst,      only: cappa
+    use air_composition,only: dry_air_species_num, thermodynamic_active_species_num
+    use air_composition,only: thermodynamic_active_species_idx_dycore    
     use derivative_mod, only: gradient_sphere, ugradv_sphere
     use edge_mod,       only: edgevpack, edgevunpack
     use bndry_mod,      only: bndry_exchange
@@ -140,7 +141,7 @@ CONTAINS
 
     do ie=nets,nete
       ! pressure at model top
-      pint(:,:) = hvcoord%hyai(1) 
+      pint(:,:) = hvcoord%hyai(1)*hvcoord%ps0
       do k=1,nlev
         ! moist pressure at mid points
         sum_water(:,:) = 1.0_r8

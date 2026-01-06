@@ -8,13 +8,14 @@ use spmd_utils,             only: iam, masterproc
 use constituents,           only: pcnst, cnst_get_ind, cnst_name, cnst_longname, &
                                   cnst_read_iv, qmin, cnst_type, tottnam,        &
                                   cnst_is_a_water_species
-use cam_control_mod,        only: initial_run, simple_phys
+use cam_control_mod,        only: initial_run
 use cam_initfiles,          only: initial_file_get_id, topo_file_get_id, pertlim
-use phys_control,           only: use_gw_front, use_gw_front_igw, waccmx_is
-use dyn_grid,               only: ini_grid_name, timelevel, hvcoord, edgebuf
+use phys_control,           only: use_gw_front, use_gw_front_igw
+use dyn_grid,               only: ini_grid_name, timelevel, hvcoord, edgebuf, &
+                                  ini_grid_hdim_name
 
 use cam_grid_support,       only: cam_grid_id, cam_grid_get_gcid, &
-                                  cam_grid_dimensions, cam_grid_get_dim_names, &
+                                  cam_grid_dimensions, &
                                   cam_grid_get_latvals, cam_grid_get_lonvals,  &
                                   max_hcoordname_len
 use cam_map_utils,          only: iMap
@@ -37,11 +38,11 @@ use shr_sys_mod,            only: shr_sys_flush
 
 use parallel_mod,           only: par
 use hybrid_mod,             only: hybrid_t
-use dimensions_mod,         only: nelemd, nlev, np, npsq, ntrac, nc, fv_nphys, &
-                                  qsize
+use dimensions_mod,         only: nelemd, nlev, np, npsq, ntrac, nc, fv_nphys
+use dimensions_mod,         only: qsize, use_cslam
 use element_mod,            only: element_t, elem_state_t
 use fvm_control_volume_mod, only: fvm_struct
-use time_mod,               only: nsplit
+use se_dyn_time_mod,        only: nsplit
 use edge_mod,               only: initEdgeBuffer, edgeVpack, edgeVunpack, FreeEdgeBuffer
 use edgetype_mod,           only: EdgeBuffer_t
 use bndry_mod,              only: bndry_exchange
@@ -76,13 +77,6 @@ logical, public, protected :: write_restart_unstruct
 integer, public    :: frontgf_idx      = -1
 integer, public    :: frontga_idx      = -1
 
-! constituent indices for waccm-x dry air properties
-integer, public, protected :: &
-   ixo  = -1, &
-   ixo2 = -1, &
-   ixh  = -1, &
-   ixh2 = -1
-
 interface read_dyn_var
   module procedure read_dyn_field_2d
   module procedure read_dyn_field_3d
@@ -90,13 +84,14 @@ end interface read_dyn_var
 
 real(r8), parameter :: rad2deg = 180.0_r8 / pi
 real(r8), parameter :: deg2rad = pi / 180.0_r8
+real(r8), parameter :: rarea_sphere = 1.0_r8 / (4.0_r8*PI)
 
 !===============================================================================
 contains
 !===============================================================================
 
 subroutine dyn_readnl(NLFileName)
-   use physconst,      only: thermodynamic_active_species_num
+   use air_composition,only: thermodynamic_active_species_num
    use namelist_utils, only: find_group_name
    use namelist_mod,   only: homme_set_defaults, homme_postprocess_namelist
    use units,          only: getunit, freeunit
@@ -112,26 +107,24 @@ subroutine dyn_readnl(NLFileName)
    use control_mod,    only: vert_remap_uvTq_alg, vert_remap_tracer_alg
    use control_mod,    only: tstep_type, rk_stage_user
    use control_mod,    only: ftype, limiter_option, partmethod
-   use control_mod,    only: topology, phys_dyn_cp, variable_nsplit
+   use control_mod,    only: topology, variable_nsplit
    use control_mod,    only: fine_ne, hypervis_power, hypervis_scaling
    use control_mod,    only: max_hypervis_courant, statediag_numtrac,refined_mesh
-   use control_mod,    only: raytau0, raykrange, rayk0, molecular_diff
+   use control_mod,    only: molecular_diff, pgf_formulation, dribble_in_rsplit_loop
+   use control_mod,    only: sponge_del4_nu_div_fac, sponge_del4_nu_fac, sponge_del4_lev
    use dimensions_mod, only: ne, npart
-   use dimensions_mod, only: lcp_moist
-   use dimensions_mod, only: hypervis_dynamic_ref_state,large_Courant_incr
+   use dimensions_mod, only: large_Courant_incr
    use dimensions_mod, only: fvm_supercycling, fvm_supercycling_jet
    use dimensions_mod, only: kmin_jet, kmax_jet
    use params_mod,     only: SFCURVE
    use parallel_mod,   only: initmpi
    use thread_mod,     only: initomp, max_num_threads
    use thread_mod,     only: horz_num_threads, vert_num_threads, tracer_num_threads
-   use physconst,      only: rearth
    ! Dummy argument
    character(len=*), intent(in) :: NLFileName
 
    ! Local variables
    integer                      :: unitn, ierr,k
-   real(r8)                     :: uniform_res_hypervis_scaling,nu_fac
 
    ! SE Namelist variables
    integer                      :: se_fine_ne
@@ -153,6 +146,9 @@ subroutine dyn_readnl(NLFileName)
    real(r8)                     :: se_nu_div
    real(r8)                     :: se_nu_p
    real(r8)                     :: se_nu_top
+   real(r8)                     :: se_sponge_del4_nu_fac
+   real(r8)                     :: se_sponge_del4_nu_div_fac
+   integer                      :: se_sponge_del4_lev
    integer                      :: se_qsplit
    logical                      :: se_refined_mesh
    integer                      :: se_rsplit
@@ -164,20 +160,15 @@ subroutine dyn_readnl(NLFileName)
    integer                      :: se_horz_num_threads
    integer                      :: se_vert_num_threads
    integer                      :: se_tracer_num_threads
-   logical                      :: se_hypervis_dynamic_ref_state
-   logical                      :: se_lcp_moist
    logical                      :: se_write_restart_unstruct
    logical                      :: se_large_Courant_incr
    integer                      :: se_fvm_supercycling
    integer                      :: se_fvm_supercycling_jet
    integer                      :: se_kmin_jet
    integer                      :: se_kmax_jet
-   integer                      :: se_phys_dyn_cp
-   real(r8)                     :: se_raytau0
-   real(r8)                     :: se_raykrange
-   integer                      :: se_rayk0
    real(r8)                     :: se_molecular_diff
-
+   integer                      :: se_pgf_formulation
+   integer                      :: se_dribble_in_rsplit_loop
    namelist /dyn_se_inparm/        &
       se_fine_ne,                  & ! For refined meshes
       se_ftype,                    & ! forcing type
@@ -198,6 +189,9 @@ subroutine dyn_readnl(NLFileName)
       se_nu_div,                   &
       se_nu_p,                     &
       se_nu_top,                   &
+      se_sponge_del4_nu_fac,       &
+      se_sponge_del4_nu_div_fac,   &
+      se_sponge_del4_lev,          &
       se_qsplit,                   &
       se_refined_mesh,             &
       se_rsplit,                   &
@@ -212,20 +206,15 @@ subroutine dyn_readnl(NLFileName)
       se_horz_num_threads,         &
       se_vert_num_threads,         &
       se_tracer_num_threads,       &
-      se_hypervis_dynamic_ref_state,&
-      se_lcp_moist,                &
       se_write_restart_unstruct,   &
       se_large_Courant_incr,       &
       se_fvm_supercycling,         &
       se_fvm_supercycling_jet,     &
       se_kmin_jet,                 &
       se_kmax_jet,                 &
-      se_phys_dyn_cp,              &
-      se_raytau0,                  &
-      se_raykrange,                &
-      se_rayk0,                    &
-      se_molecular_diff
-
+      se_molecular_diff,           &
+      se_pgf_formulation,          &
+      se_dribble_in_rsplit_loop
    !--------------------------------------------------------------------------
 
    ! defaults for variables not set by build-namelist
@@ -273,6 +262,9 @@ subroutine dyn_readnl(NLFileName)
    call MPI_bcast(se_nu_div, 1, mpi_real8, masterprocid, mpicom, ierr)
    call MPI_bcast(se_nu_p, 1, mpi_real8, masterprocid, mpicom, ierr)
    call MPI_bcast(se_nu_top, 1, mpi_real8, masterprocid, mpicom, ierr)
+   call MPI_bcast(se_sponge_del4_nu_fac, 1, mpi_real8, masterprocid, mpicom, ierr)
+   call MPI_bcast(se_sponge_del4_nu_div_fac, 1, mpi_real8, masterprocid, mpicom, ierr)
+   call MPI_bcast(se_sponge_del4_lev, 1, mpi_integer, masterprocid, mpicom, ierr)
    call MPI_bcast(se_qsplit, 1, mpi_integer, masterprocid, mpicom, ierr)
    call MPI_bcast(se_refined_mesh, 1, mpi_logical, masterprocid, mpicom, ierr)
    call MPI_bcast(se_rsplit, 1, mpi_integer, masterprocid, mpicom, ierr)
@@ -288,20 +280,15 @@ subroutine dyn_readnl(NLFileName)
    call MPI_bcast(se_horz_num_threads, 1, MPI_integer, masterprocid, mpicom,ierr)
    call MPI_bcast(se_vert_num_threads, 1, MPI_integer, masterprocid, mpicom,ierr)
    call MPI_bcast(se_tracer_num_threads, 1, MPI_integer, masterprocid, mpicom,ierr)
-   call MPI_bcast(se_hypervis_dynamic_ref_state, 1, mpi_logical, masterprocid, mpicom, ierr)
-   call MPI_bcast(se_lcp_moist, 1, mpi_logical, masterprocid, mpicom, ierr)
    call MPI_bcast(se_write_restart_unstruct, 1, mpi_logical, masterprocid, mpicom, ierr)
    call MPI_bcast(se_large_Courant_incr, 1, mpi_logical, masterprocid, mpicom, ierr)
    call MPI_bcast(se_fvm_supercycling, 1, mpi_integer, masterprocid, mpicom, ierr)
    call MPI_bcast(se_fvm_supercycling_jet, 1, mpi_integer, masterprocid, mpicom, ierr)
    call MPI_bcast(se_kmin_jet, 1, mpi_integer, masterprocid, mpicom, ierr)
    call MPI_bcast(se_kmax_jet, 1, mpi_integer, masterprocid, mpicom, ierr)
-   call MPI_bcast(se_phys_dyn_cp, 1, mpi_integer, masterprocid, mpicom, ierr)
-   call MPI_bcast(se_rayk0 , 1, mpi_integer, masterprocid, mpicom, ierr)
-   call MPI_bcast(se_raykrange, 1, mpi_real8, masterprocid, mpicom, ierr)
-   call MPI_bcast(se_raytau0, 1, mpi_real8, masterprocid, mpicom, ierr)
    call MPI_bcast(se_molecular_diff, 1, mpi_real8, masterprocid, mpicom, ierr)
-
+   call MPI_bcast(se_pgf_formulation, 1, mpi_integer, masterprocid, mpicom, ierr)
+   call MPI_bcast(se_dribble_in_rsplit_loop, 1, mpi_integer, masterprocid, mpicom, ierr)
    if (se_npes <= 0) then
       call endrun('dyn_readnl: ERROR: se_npes must be > 0')
    end if
@@ -351,6 +338,9 @@ subroutine dyn_readnl(NLFileName)
    nu_p                     = se_nu_p
    nu_q                     = se_nu_p !for tracer-wind consistency nu_q must me equal to nu_p
    nu_top                   = se_nu_top
+   sponge_del4_nu_fac       = se_sponge_del4_nu_fac
+   sponge_del4_nu_div_fac   = se_sponge_del4_nu_div_fac
+   sponge_del4_lev          = se_sponge_del4_lev
    qsplit                   = se_qsplit
    rsplit                   = se_rsplit
    statefreq                = se_statefreq
@@ -358,30 +348,27 @@ subroutine dyn_readnl(NLFileName)
    vert_remap_uvTq_alg      = set_vert_remap(se_vert_remap_T, se_vert_remap_uvTq_alg)
    vert_remap_tracer_alg    = set_vert_remap(se_vert_remap_T, se_vert_remap_tracer_alg)
    fv_nphys                 = se_fv_nphys
-   hypervis_dynamic_ref_state = se_hypervis_dynamic_ref_state
-   lcp_moist                = se_lcp_moist
    large_Courant_incr       = se_large_Courant_incr
    fvm_supercycling         = se_fvm_supercycling
    fvm_supercycling_jet     = se_fvm_supercycling_jet
    kmin_jet                 = se_kmin_jet
    kmax_jet                 = se_kmax_jet
    variable_nsplit          = .false.
-   phys_dyn_cp              = se_phys_dyn_cp
-   raytau0                  = se_raytau0
-   raykrange                = se_raykrange
-   rayk0                    = se_rayk0
    molecular_diff           = se_molecular_diff
-
+   pgf_formulation          = se_pgf_formulation
+   dribble_in_rsplit_loop   = se_dribble_in_rsplit_loop
    if (fv_nphys > 0) then
       ! Use finite volume physics grid and CSLAM for tracer advection
       nphys_pts = fv_nphys*fv_nphys
       qsize = thermodynamic_active_species_num ! number tracers advected by GLL
-      ntrac = pcnst                    ! number tracers advected by CSLAM
+      ntrac = pcnst                            ! number tracers advected by CSLAM
+      use_cslam = .true.
    else
       ! Use GLL grid for physics and tracer advection
       nphys_pts = npsq
       qsize = pcnst
       ntrac = 0
+      use_cslam = .false.
    end if
 
    if (rsplit < 1) then
@@ -440,7 +427,6 @@ subroutine dyn_readnl(NLFileName)
       end if
       write(iulog, '(a,i0)')   'dyn_readnl: se_npes                     = ',se_npes
       write(iulog, '(a,i0)')   'dyn_readnl: se_nsplit                   = ',se_nsplit
-      write(iulog, '(a,i0)')   'dyn_readnl: se_phys_dyn_cp              = ',se_phys_dyn_cp
       !
       ! se_nu<0 then coefficients are set automatically in module global_norms_mod
       !
@@ -460,12 +446,18 @@ subroutine dyn_readnl(NLFileName)
       write(iulog, '(a,a)')    'dyn_readnl: se_vert_remap_T               = ',trim(se_vert_remap_T)
       write(iulog, '(a,a)')    'dyn_readnl: se_vert_remap_uvTq_alg        = ',trim(se_vert_remap_uvTq_alg)
       write(iulog, '(a,a)')    'dyn_readnl: se_vert_remap_tracer_alg      = ',trim(se_vert_remap_tracer_alg)
-      write(iulog, '(a,l4)')   'dyn_readnl: se_hypervis_dynamic_ref_state = ',hypervis_dynamic_ref_state
-      write(iulog, '(a,l4)')   'dyn_readnl: lcp_moist                     = ',lcp_moist
       write(iulog, '(a,i0)')   'dyn_readnl: se_fvm_supercycling           = ',fvm_supercycling
       write(iulog, '(a,i0)')   'dyn_readnl: se_fvm_supercycling_jet       = ',fvm_supercycling_jet
       write(iulog, '(a,i0)')   'dyn_readnl: se_kmin_jet                   = ',kmin_jet
       write(iulog, '(a,i0)')   'dyn_readnl: se_kmax_jet                   = ',kmax_jet
+
+      write(iulog, *)   'dyn_readnl: se_sponge_del4_nu_fac         = ',se_sponge_del4_nu_fac
+      if (se_sponge_del4_nu_fac < 0) write(iulog, '(a)')   ' (automatically set based on model top location)'
+      write(iulog, *)   'dyn_readnl: se_sponge_del4_nu_div_fac     = ',se_sponge_del4_nu_div_fac
+      if (se_sponge_del4_nu_div_fac < 0)  write(iulog, '(a)')   ' (automatically set based on model top location)'
+      write(iulog, *)   'dyn_readnl: se_sponge_del4_lev            = ',se_sponge_del4_lev
+      if (se_sponge_del4_lev < 0)  write(iulog, '(a)')   ' (automatically set based on model top location)'
+
       if (se_refined_mesh) then
          write(iulog, '(a)') 'dyn_readnl: Refined mesh simulation'
          write(iulog, '(a)') 'dyn_readnl: se_mesh_file = ',trim(se_mesh_file)
@@ -480,7 +472,7 @@ subroutine dyn_readnl(NLFileName)
          end if
       end if
 
-      if (fv_nphys > 0) then
+      if (use_cslam) then
          write(iulog, '(a)') 'dyn_readnl: physics will run on FVM points; advection by CSLAM'
          write(iulog,'(a,i0)') 'dyn_readnl: se_fv_nphys = ', fv_nphys
       else
@@ -499,9 +491,6 @@ subroutine dyn_readnl(NLFileName)
       write(iulog,'(a,l1)') 'dyn_readnl: write restart data on unstructured grid = ', &
                             se_write_restart_unstruct
 
-      write(iulog, '(a,e9.2)') 'dyn_readnl: se_raytau0         = ', raytau0
-      write(iulog, '(a,e9.2)') 'dyn_readnl: se_raykrange       = ', raykrange
-      write(iulog, '(a,i0)'  ) 'dyn_readnl: se_rayk0           = ', rayk0
       write(iulog, '(a,e9.2)') 'dyn_readnl: se_molecular_diff  = ', molecular_diff
    end if
 
@@ -589,45 +578,54 @@ subroutine dyn_init(dyn_in, dyn_out)
    use prim_advance_mod,   only: prim_advance_init
    use dyn_grid,           only: elem, fvm
    use cam_pio_utils,      only: clean_iodesc_list
-   use physconst,          only: thermodynamic_active_species_num, thermodynamic_active_species_idx
-   use physconst,          only: thermodynamic_active_species_idx_dycore, rair, cpair
+   use physconst,          only: cpair, pstd
+   use air_composition,    only: thermodynamic_active_species_num, thermodynamic_active_species_idx
+   use air_composition,    only: thermodynamic_active_species_idx_dycore
+   use air_composition,    only: thermodynamic_active_species_liq_idx,thermodynamic_active_species_ice_idx
+   use air_composition,    only: thermodynamic_active_species_liq_idx_dycore,thermodynamic_active_species_ice_idx_dycore
+   use air_composition,    only: thermodynamic_active_species_liq_num, thermodynamic_active_species_ice_num
    use cam_history,        only: addfld, add_default, horiz_only, register_vector_field
    use gravity_waves_sources, only: gws_init
 
    use thread_mod,         only: horz_num_threads
    use hybrid_mod,         only: get_loop_ranges, config_thread_region
-   use dimensions_mod,     only: nu_scale_top, nu_lev, nu_div_lev
+   use dimensions_mod,     only: nu_scale_top
    use dimensions_mod,     only: ksponge_end, kmvis_ref, kmcnd_ref,rho_ref,km_sponge_factor
-   use dimensions_mod,     only: kmvisi_ref, kmcndi_ref,rhoi_ref
    use dimensions_mod,     only: cnst_name_gll, cnst_longname_gll
-   use dimensions_mod,     only: irecons_tracer_lev, irecons_tracer, otau, kord_tr, kord_tr_cslam
+   use dimensions_mod,     only: irecons_tracer_lev, irecons_tracer, kord_tr, kord_tr_cslam
    use prim_driver_mod,    only: prim_init2
-   use time_mod,           only: time_at
-   use control_mod,        only: runtype, raytau0, raykrange, rayk0, molecular_diff, nu_top
+   use control_mod,        only: molecular_diff, nu_top
    use test_fvm_mapping,   only: test_mapping_addfld
    use phys_control,       only: phys_getopts
-   use physconst,          only: get_molecular_diff_coef_reference
+   use cam_thermo,         only: get_molecular_diff_coef_reference
    use control_mod,        only: vert_remap_uvTq_alg, vert_remap_tracer_alg
+   use std_atm_profile,    only: std_atm_height
+   use dyn_tests_utils,    only: vc_dycore, vc_dry_pressure, string_vc, vc_str_lgth
+   use cam_budget,         only: cam_budget_em_snapshot, cam_budget_em_register, thermo_budget_history
+
    ! Dummy arguments:
    type(dyn_import_t), intent(out) :: dyn_in
    type(dyn_export_t), intent(out) :: dyn_out
 
    ! Local variables
-   integer             :: ithr, nets, nete, ie, k, kmol_end
+   integer             :: nets, nete, ie, k, kmol_end, mfound
    real(r8), parameter :: Tinit = 300.0_r8
-   real(r8)            :: press, ptop, tref
+   real(r8)            :: press(1), ptop, tref,z(1)
 
    type(hybrid_t)      :: hybrid
 
-   integer :: ixcldice, ixcldliq, ixrain, ixsnow, ixgraupel
+   integer :: ixcldice, ixcldliq
    integer :: m_cnst, m
 
    ! variables for initializing energy and axial angular momentum diagnostics
-   character (len = 3), dimension(12) :: stage = (/"dED","dAF","dBD","dAD","dAR","dBF","dBH","dCH","dAH",'dBS','dAS','p2d'/)
-   character (len = 70),dimension(12) :: stage_txt = (/&
+   integer, parameter                         :: num_stages = 14
+   character (len = 4), dimension(num_stages) :: stage         = (/"dED","dAF","dBD","dBL","dAL","dAD","dAR","dBF","dBH","dCH","dAH","dBS","dAS","p2d"/)
+   character (len = 70),dimension(num_stages) :: stage_txt = (/&
       " end of previous dynamics                           ",& !dED
       " from previous remapping or state passed to dynamics",& !dAF - state in beginning of nsplit loop
       " state after applying CAM forcing                   ",& !dBD - state after applyCAMforcing
+      " before floating dynamics                           ",& !dBL
+      " after floating dynamics                            ",& !dAL
       " before vertical remapping                          ",& !dAD - state before vertical remapping
       " after vertical remapping                           ",& !dAR - state at end of nsplit loop
       " state passed to parameterizations                  ",& !dBF
@@ -638,42 +636,29 @@ subroutine dyn_init(dyn_in, dyn_out)
       " state after sponge layer diffusion                 ",& !dAS - state after sponge del2
       " phys2dyn mapping errors (requires ftype-1)         " & !p2d - for assessing phys2dyn mapping errors
       /)
-   character (len = 2)  , dimension(8) :: vars  = (/"WV"  ,"WL"  ,"WI"  ,"SE"   ,"KE"   ,"MR"   ,"MO"   ,"TT"   /)
-   !if ntrac>0 then tracers should be output on fvm grid but not energy (SE+KE) and AAM diags
-   logical              , dimension(8) :: massv = (/.true.,.true.,.true.,.false.,.false.,.false.,.false.,.false./)
-   character (len = 70) , dimension(8) :: vars_descriptor = (/&
-      "Total column water vapor                ",&
-      "Total column cloud water                ",&
-      "Total column cloud ice                  ",&
-      "Total column dry static energy          ",&
-      "Total column kinetic energy             ",&
-      "Total column wind axial angular momentum",&
-      "Total column mass axial angular momentum",&
-      "Total column test tracer                "/)
-   character (len = 14), dimension(8)  :: &
-      vars_unit = (/&
-      "kg/m2        ","kg/m2        ","kg/m2        ","J/m2         ",&
-      "J/m2         ","kg*m2/s*rad2 ","kg*m2/s*rad2 ","kg/m2        "/)
 
-   integer :: istage, ivars
-   character (len=108) :: str1, str2, str3
+   integer :: istage
+   character (len=vc_str_lgth) :: vc_str
 
-   logical :: history_budget      ! output tendencies and state variables for budgets
+   logical :: history_budget        ! output tendencies and state variables for budgets
    integer :: budget_hfile_num
 
-   character(len=*), parameter :: subname = 'dyn_init'
+   character(len=*), parameter :: sub = 'dyn_init'
 
-   real(r8) :: tau0, krange, otau0, scale
    real(r8) :: km_sponge_factor_local(nlev+1)
    !----------------------------------------------------------------------------
-
+   vc_dycore = vc_dry_pressure
+   if (masterproc) then
+     call string_vc(vc_dycore,vc_str)
+     write(iulog,*) sub//': vertical coordinate dycore   : ',trim(vc_str)
+   end if
    ! Now allocate and set condenstate vars
    allocate(cnst_name_gll(qsize))     ! constituent names for gll tracers
    allocate(cnst_longname_gll(qsize)) ! long name of constituents for gll tracers
 
    allocate(kord_tr(qsize))
    kord_tr(:) = vert_remap_tracer_alg
-   if (ntrac>0) then
+   if (use_cslam) then
      allocate(kord_tr_cslam(ntrac))
      kord_tr_cslam(:) = vert_remap_tracer_alg
    end if
@@ -691,7 +676,7 @@ subroutine dyn_init(dyn_in, dyn_out)
      ! CSLAM tracers are always indexed as in physics
      ! of no CSLAM then SE tracers are always indexed as in physics
      !
-     if (ntrac>0) then
+     if (use_cslam) then
        !
        ! note that in this case qsize = thermodynamic_active_species_num
        !
@@ -711,11 +696,37 @@ subroutine dyn_init(dyn_in, dyn_out)
        end if
        cnst_name_gll    (m)                = cnst_name    (m)
        cnst_longname_gll(m)                = cnst_longname(m)
-
      end if
    end do
 
-
+   do m=1,thermodynamic_active_species_liq_num
+     if (use_cslam) then
+       do mfound=1,qsize
+         if (TRIM(cnst_name(thermodynamic_active_species_liq_idx(m)))==TRIM(cnst_name_gll(mfound))) then
+           thermodynamic_active_species_liq_idx_dycore(m) = mfound
+         end if
+       end do
+     else
+       thermodynamic_active_species_liq_idx_dycore(m) = thermodynamic_active_species_liq_idx(m)
+     end if
+     if (masterproc) then
+       write(iulog,*) sub//": m,thermodynamic_active_species_idx_liq_dycore: ",m,thermodynamic_active_species_liq_idx_dycore(m)
+     end if
+   end do
+   do m=1,thermodynamic_active_species_ice_num
+     if (use_cslam) then
+       do mfound=1,qsize
+         if (TRIM(cnst_name(thermodynamic_active_species_ice_idx(m)))==TRIM(cnst_name_gll(mfound))) then
+           thermodynamic_active_species_ice_idx_dycore(m) = mfound
+         end if
+       end do
+     else
+       thermodynamic_active_species_ice_idx_dycore(m) = thermodynamic_active_species_ice_idx(m)
+     end if
+     if (masterproc) then
+       write(iulog,*) sub//": m,thermodynamic_active_species_idx_ice_dycore: ",m,thermodynamic_active_species_ice_idx_dycore(m)
+     end if
+   end do
 
    !
    ! Initialize the import/export objects
@@ -740,27 +751,6 @@ subroutine dyn_init(dyn_in, dyn_out)
      call clean_iodesc_list()
    end if
    !
-   ! initialize Rayleigh friction
-   !
-   krange = raykrange
-   if (raykrange .eq. 0._r8) krange = (rayk0 - 1) / 2._r8
-   tau0 = (86400._r8) * raytau0   ! convert to seconds
-   otau0 = 0._r8
-   if (tau0 .ne. 0._r8) otau0 = 1._r8/tau0
-   do k = 1, nlev
-     otau(k) = otau0 * (1.0_r8 + tanh((rayk0 - k) / krange)) / (2._r8)
-   enddo
-   if (masterproc) then
-     if (tau0 > 0._r8) then
-       write (iulog,*) 'SE dycore Rayleigh friction - krange = ', krange
-       write (iulog,*) 'SE dycore Rayleigh friction - otau0 = ', 1.0_r8/tau0
-       write (iulog,*) 'SE dycore Rayleigh friction decay rate profile (only applied to (u,v))'
-       do k = 1, nlev
-         write (iulog,*) '   k = ', k, '   otau = ', otau(k)
-       enddo
-     end if
-   end if
-   !
    ! initialize diffusion in dycore
    !
    kmol_end = 0
@@ -768,28 +758,28 @@ subroutine dyn_init(dyn_in, dyn_out)
      !
      ! molecular diffusion and thermal conductivity reference values
      !
-     if (masterproc) write(iulog,*) subname//": initialize molecular diffusion reference profiles"
+     if (masterproc) write(iulog,*) sub//": initialize molecular diffusion reference profiles"
      tref = 1000._r8     !mean value at model top for solar max
      km_sponge_factor = molecular_diff
      km_sponge_factor_local = molecular_diff
-     call get_molecular_diff_coef_reference(1,nlev+1,tref,&
-          (hvcoord%hyai(:)+hvcoord%hybi(:))*hvcoord%ps0, km_sponge_factor_local,&
-          kmvisi_ref,kmcndi_ref,rhoi_ref)
      !
      ! get rho, kmvis and kmcnd at mid-levels
      !
-     call get_molecular_diff_coef_reference(1,nlev,tref,&
+     call get_molecular_diff_coef_reference(tref,&
           (hvcoord%hyam(:)+hvcoord%hybm(:))*hvcoord%ps0,km_sponge_factor,&
           kmvis_ref,kmcnd_ref,rho_ref)
 
+     if (masterproc) then
+        write(iulog,*) "Molecular viscosity and thermal conductivity reference profile"
+        write(iulog,*) "k, p, z, km_sponge_factor, kmvis_ref/rho_ref, kmcnd_ref/(cp*rho_ref):"
+     end if
      do k=1,nlev
        ! only apply molecular viscosity where viscosity is > 1000 m/s^2
        if (MIN(kmvis_ref(k)/rho_ref(k),kmcnd_ref(k)/(cpair*rho_ref(k)))>1000.0_r8) then
          if (masterproc) then
-            write(iulog,'(a,i3,2e11.4)') "k, p, km_sponge_factor                   :",k, &
-               (hvcoord%hyam(k)+hvcoord%hybm(k))*hvcoord%ps0,km_sponge_factor(k)
-            write(iulog,'(a,2e11.4)') "kmvis_ref/rho_ref, kmcnd_ref/(cp*rho_ref): ", &
-               kmvis_ref(k)/rho_ref(k),kmcnd_ref(k)/(cpair*rho_ref(k))
+           press = hvcoord%hyam(k)*hvcoord%ps0+hvcoord%hybm(k)*pstd
+           call std_atm_height(press,z)
+           write(iulog,'(i3,5e11.4)') k,press, z,km_sponge_factor(k),kmvis_ref(k)/rho_ref(k),kmcnd_ref(k)/(cpair*rho_ref(k))
          end if
          kmol_end = k
        else
@@ -811,26 +801,61 @@ subroutine dyn_init(dyn_in, dyn_out)
    !
    nu_scale_top(:) = 0.0_r8
    if (nu_top>0) then
-     if (masterproc) write(iulog,*) subname//": sponge layer viscosity scaling factor"
-     do k=1,nlev
-       press = (hvcoord%hyam(k)+hvcoord%hybm(k))*hvcoord%ps0
-       ptop  = hvcoord%hyai(1)*hvcoord%ps0
-       nu_scale_top(k) = 8.0_r8*(1.0_r8+tanh(1.0_r8*log(ptop/press))) ! tau will be maximum 8 at model top
-       if (nu_scale_top(k).ge.0.15_r8) then
-         ksponge_end = k
-       else
-         nu_scale_top(k) = 0.0_r8
-       end if
-     end do
+      ptop  = hvcoord%hyai(1)*hvcoord%ps0
+      if (ptop>300.0_r8) then
+         !
+         ! for low tops the tanh formulae below makes the sponge excessively deep
+         !
+         nu_scale_top(1) = 4.0_r8
+         nu_scale_top(2) = 2.0_r8
+         nu_scale_top(3) = 1.0_r8
+         ksponge_end = 3
+      else if (ptop>100.0_r8) then
+         !
+         ! CAM6 top (~225 Pa) or CAM7 low top
+         !
+         ! For backwards compatibility numbers below match tanh profile
+         ! used in FV
+         !
+         nu_scale_top(1) = 4.4_r8
+         nu_scale_top(2) = 1.3_r8
+         nu_scale_top(3) = 3.9_r8
+         ksponge_end = 3
+      else if (ptop>1e-1_r8) then
+         !
+         ! CAM7 FMT
+         !
+         nu_scale_top(1) = 3.0_r8
+         nu_scale_top(2) = 1.0_r8
+         nu_scale_top(3) = 0.1_r8
+         nu_scale_top(4) = 0.05_r8
+         ksponge_end = 4
+      else if (ptop>1e-4_r8) then
+         !
+         ! WACCM and WACCM-x
+         !
+         nu_scale_top(1) = 5.0_r8
+         nu_scale_top(2) = 5.0_r8
+         nu_scale_top(3) = 5.0_r8
+         nu_scale_top(4) = 2.0_r8
+         nu_scale_top(5) = 1.0_r8
+         nu_scale_top(6) = 0.1_r8
+         ksponge_end = 6
+      end if
    else
-     ksponge_end = 0
+      ksponge_end = 0
    end if
    ksponge_end = MAX(MAX(ksponge_end,1),kmol_end)
    if (masterproc) then
-     write(iulog,*) subname//": ksponge_end = ",ksponge_end
+     write(iulog,*) sub//": ksponge_end = ",ksponge_end
+     write(iulog,*) sub//": sponge layer Laplacian damping"
+     write(iulog,*) "k, p, z, nu_scale_top, nu (actual Laplacian damping coefficient)"
      if (nu_top>0) then
-       do k=1,ksponge_end
-         write(iulog,'(a,i3,1e11.4)') subname//": nu_scale_top ",k,nu_scale_top(k)
+       do k=1,ksponge_end+1
+         press = (hvcoord%hyam(k)+hvcoord%hybm(k))*hvcoord%ps0
+         call std_atm_height(press,z)
+         write(iulog,'(i3,4e11.4)') k,press,z,&
+              nu_scale_top(k),nu_scale_top(k)*nu_top
        end do
      end if
    end if
@@ -858,7 +883,7 @@ subroutine dyn_init(dyn_in, dyn_out)
    call addfld ('FT',  (/ 'lev' /), 'A', 'K/s', 'Temperature forcing term on GLL grid',gridname='GLL')
 
    ! Tracer forcing on fvm (CSLAM) grid and internal CSLAM pressure fields
-   if (ntrac>0) then
+   if (use_cslam) then
       do m = 1, ntrac
          call addfld (trim(cnst_name(m))//'_fvm',  (/ 'lev' /), 'I', 'kg/kg',   &
             trim(cnst_longname(m)), gridname='FVM')
@@ -874,13 +899,13 @@ subroutine dyn_init(dyn_in, dyn_out)
 
    do m_cnst = 1, qsize
      call addfld ('F'//trim(cnst_name_gll(m_cnst))//'_gll',  (/ 'lev' /), 'I', 'kg/kg/s',   &
-          trim(cnst_longname(m_cnst))//' mixing ratio forcing term (q_new-q_old) on GLL grid', gridname='GLL')
+          trim(cnst_longname_gll(m_cnst))//' mixing ratio forcing term (q_new-q_old) on GLL grid', gridname='GLL')
    end do
 
    ! Energy diagnostics and axial angular momentum diagnostics
    call addfld ('ABS_dPSdt',  horiz_only, 'A', 'Pa/s', 'Absolute surface pressure tendency',gridname='GLL')
 
-   if (ntrac>0) then
+   if (use_cslam) then
 #ifdef waccm_debug
      call addfld ('CSLAM_gamma',  (/ 'lev' /), 'A', '', 'Courant number from CSLAM',     gridname='FVM')
 #endif
@@ -895,24 +920,43 @@ subroutine dyn_init(dyn_in, dyn_out)
      call addfld ('TT_PDC',   horiz_only, 'A', 'kg/m2','Total column test tracer lost in physics-dynamics coupling',gridname='GLL')
    end if
 
-   do istage = 1,SIZE(stage)
-      do ivars=1,SIZE(vars)
-         write(str1,*) TRIM(ADJUSTL(vars(ivars))),TRIM(ADJUSTL("_")),TRIM(ADJUSTL(stage(istage)))
-         write(str2,*) TRIM(ADJUSTL(vars_descriptor(ivars))),&
-             TRIM(ADJUSTL(" ")),TRIM(ADJUSTL(stage_txt(istage)))
-         write(str3,*) TRIM(ADJUSTL(vars_unit(ivars)))
-         if (ntrac>0.and.massv(ivars)) then
-           call addfld (TRIM(ADJUSTL(str1)),   horiz_only, 'A', TRIM(ADJUSTL(str3)),TRIM(ADJUSTL(str2)),gridname='FVM')
-         else
-           call addfld (TRIM(ADJUSTL(str1)),   horiz_only, 'A', TRIM(ADJUSTL(str3)),TRIM(ADJUSTL(str2)),gridname='GLL')
-         end if
+   if (thermo_budget_history) then
+      ! Register stages for budgets
+      do istage = 1, num_stages
+         call cam_budget_em_snapshot(TRIM(ADJUSTL(stage(istage))), 'dyn', &
+              longname=TRIM(ADJUSTL(stage_txt(istage))))
       end do
-   end do
-
+      !
+      ! Register tendency (difference) budgets
+      !
+      call cam_budget_em_register('dEdt_floating_dyn'   ,'dAL','dBL','dyn','dif', &
+                      longname="dE/dt floating dynamics (dAL-dBL)"               )
+      call cam_budget_em_register('dEdt_vert_remap'     ,'dAR','dAD','dyn','dif', &
+                      longname="dE/dt vertical remapping (dAR-dAD)"              )
+      call cam_budget_em_register('dEdt_phys_tot_in_dyn','dBD','dAF','dyn','dif', &
+                      longname="dE/dt physics tendency in dynamics (dBD-dAF)"    )
+      call cam_budget_em_register('dEdt_del4'          ,'dCH','dBH','dyn','dif', &
+                      longname="dE/dt del4 (dCH-dBH)"                            )
+      call cam_budget_em_register('dEdt_del4_fric_heat','dAH','dCH','dyn','dif', &
+                      longname="dE/dt del4 frictional heating (dAH-dCH)"         )
+      call cam_budget_em_register('dEdt_del4_tot'      ,'dAH','dBH','dyn','dif', &
+                      longname="dE/dt del4 + del4 frictional heating (dAH-dBH)"  )
+      call cam_budget_em_register('dEdt_del2_sponge'   ,'dAS','dBS','dyn','dif', &
+                      longname="dE/dt del2 sponge (dAS-dBS)"                     )
+      !
+      ! Register derived budgets
+      !
+      call cam_budget_em_register('dEdt_dycore'        ,'dEdt_floating_dyn','dEdt_vert_remap'   ,'dyn','sum', &
+                      longname="dE/dt adiabatic dynamics"                              )
+      call cam_budget_em_register('dEdt_del2_del4_tot' ,'dEdt_del4_tot'    ,'dEdt_del2_sponge'  ,'dyn','sum', &
+                      longname="dE/dt explicit diffusion total"                        )
+      call cam_budget_em_register('dEdt_residual'      ,'dEdt_floating_dyn','dEdt_del2_del4_tot','dyn','dif',&
+                      longname="dE/dt residual (dEdt_floating_dyn-dEdt_del2_del4_tot)" )
+   end if
    !
    ! add dynamical core tracer tendency output
    !
-   if (ntrac>0) then
+   if (use_cslam) then
      do m = 1, pcnst
        call addfld(tottnam(m),(/ 'lev' /),'A','kg/kg/s',trim(cnst_name(m))//' horz + vert',  &
             gridname='FVM')
@@ -932,37 +976,27 @@ subroutine dyn_init(dyn_in, dyn_out)
       call add_default(tottnam(ixcldice), budget_hfile_num, ' ')
    end if
 
-   ! constituent indices for waccm-x
-   if ( waccmx_is('ionosphere') .or. waccmx_is('neutral') ) then
-      call cnst_get_ind('O',  ixo)
-      call cnst_get_ind('O2', ixo2)
-      call cnst_get_ind('H',  ixh)
-      call cnst_get_ind('H2', ixh2)
-   end if
-
    call test_mapping_addfld
 end subroutine dyn_init
 
 !=========================================================================================
 
 subroutine dyn_run(dyn_state)
-   use physconst,        only: thermodynamic_active_species_num, dry_air_species_num
-   use physconst,        only: thermodynamic_active_species_idx_dycore
-   use prim_advance_mod, only: calc_tot_energy_dynamics
+   use air_composition,  only: thermodynamic_active_species_num, dry_air_species_num
+   use air_composition,  only: thermodynamic_active_species_idx_dycore
    use prim_driver_mod,  only: prim_run_subcycle
    use dimensions_mod,   only: cnst_name_gll
-   use time_mod,         only: tstep, nsplit, timelevel_qdp
+   use se_dyn_time_mod,  only: tstep, nsplit, timelevel_qdp, tevolve
    use hybrid_mod,       only: config_thread_region, get_loop_ranges
    use control_mod,      only: qsplit, rsplit, ftype_conserve
    use thread_mod,       only: horz_num_threads
-   use time_mod,         only: tevolve
 
    type(dyn_export_t), intent(inout) :: dyn_state
 
    type(hybrid_t) :: hybrid
    integer        :: tl_f
    integer        :: n
-   integer        :: nets, nete, ithr
+   integer        :: nets, nete
    integer        :: i, ie, j, k, m, nq, m_cnst
    integer        :: n0_qdp, nsplit_local
    logical        :: ldiag
@@ -1030,24 +1064,23 @@ subroutine dyn_run(dyn_state)
      end if
    end do
 
-
-
    ! convert elem(ie)%derived%fq to mass tendency
-   do ie = nets, nete
-      do m = 1, qsize
+   if (.not.use_cslam) then
+     do ie = nets, nete
+       do m = 1, qsize
          do k = 1, nlev
-            do j = 1, np
-               do i = 1, np
-                  dyn_state%elem(ie)%derived%FQ(i,j,k,m) = dyn_state%elem(ie)%derived%FQ(i,j,k,m)* &
-                     rec2dt*dyn_state%elem(ie)%state%dp3d(i,j,k,tl_f)
-               end do
-            end do
+           do j = 1, np
+             do i = 1, np
+               dyn_state%elem(ie)%derived%FQ(i,j,k,m) = dyn_state%elem(ie)%derived%FQ(i,j,k,m)* &
+                    rec2dt*dyn_state%elem(ie)%state%dp3d(i,j,k,tl_f)
+             end do
+           end do
          end do
-      end do
-   end do
+       end do
+     end do
+   end if
 
-
-   if (ftype_conserve>0) then
+   if (ftype_conserve>0.and..not.use_cslam) then
      do ie = nets, nete
        do k=1,nlev
          do j=1,np
@@ -1064,8 +1097,7 @@ subroutine dyn_run(dyn_state)
      end do
    end if
 
-
-   if (ntrac > 0) then
+   if (use_cslam) then
       do ie = nets, nete
          do m = 1, ntrac
             do k = 1, nlev
@@ -1113,8 +1145,6 @@ subroutine dyn_run(dyn_state)
       end do
    end if
 
-
-   call calc_tot_energy_dynamics(dyn_state%elem,dyn_state%fvm, nets, nete, TimeLevel%n0, n0_qdp,'dBF')
    !$OMP END PARALLEL
 
    if (ldiag) then
@@ -1137,17 +1167,17 @@ end subroutine dyn_final
 !===============================================================================
 
 subroutine read_inidat(dyn_in)
-   use physconst,           only: thermodynamic_active_species_num, dry_air_species_num
+   use air_composition,     only: thermodynamic_active_species_num, dry_air_species_num
    use shr_sys_mod,         only: shr_sys_flush
    use hycoef,              only: hyai, hybi, ps0
    use const_init,          only: cnst_init_default
 
    use element_mod,         only: timelevels
    use fvm_mapping,         only: dyn2fvm_mass_vars
-   use control_mod,         only: runtype,initial_global_ave_dry_ps
+   use control_mod,         only: runtype
    use prim_driver_mod,     only: prim_set_dry_mass
-   use physconst,           only: thermodynamic_active_species_idx
-
+   use air_composition,     only: thermodynamic_active_species_idx
+   use cam_initfiles,       only: scale_dry_air_mass
    ! Arguments
    type (dyn_import_t), target, intent(inout) :: dyn_in   ! dynamics import
 
@@ -1167,8 +1197,8 @@ subroutine read_inidat(dyn_in)
    logical,  allocatable            :: pmask(:)           ! (npsq*nelemd) unique grid vals
 
    character(len=max_hcoordname_len):: grid_name
-   real(r8), allocatable            :: latvals(:),latvals_phys(:)
-   real(r8), allocatable            :: lonvals(:),lonvals_phys(:)
+   real(r8), allocatable            :: latvals(:)
+   real(r8), allocatable            :: lonvals(:)
    real(r8), pointer                :: latvals_deg(:)
    real(r8), pointer                :: lonvals_deg(:)
 
@@ -1180,9 +1210,6 @@ subroutine read_inidat(dyn_in)
    integer                          :: kptr, m_cnst
    type(EdgeBuffer_t)               :: edge
 
-   character(len=max_fieldname_len) :: dimname, varname
-   integer                          :: ierr
-
    integer                          :: rndm_seed_sz
    integer, allocatable             :: rndm_seed(:)
    integer                          :: dims(2)
@@ -1191,11 +1218,7 @@ subroutine read_inidat(dyn_in)
    integer                          :: i, j, indx, nq
    integer                          :: dyn_cols
    character(len=128)               :: errmsg
-   character(len=*), parameter      :: subname='READ_INIDAT'
-
-   ! fvm vars
-   real(r8), allocatable            :: inv_dp_darea_fvm(:,:,:)
-   real(r8)                         :: min_val, max_val
+   character(len=*), parameter      :: sub='READ_INIDAT'
 
    real(r8)                         :: dp_tmp, pstmp(np,np)
 
@@ -1330,7 +1353,7 @@ subroutine read_inidat(dyn_in)
       allocate(dbuf3(npsq,nlev,nelemd))
 
       ! Check that columns in IC file match grid definition.
-      call check_file_layout(fh_ini, elem, dyn_cols, 'ncdata', .true., dimname)
+      call check_file_layout(fh_ini, elem, dyn_cols, 'ncdata', .true.)
 
       ! Read 2-D field
 
@@ -1338,17 +1361,17 @@ subroutine read_inidat(dyn_in)
       fieldname2 = 'PSDRY'
       if (dyn_field_exists(fh_ini, trim(fieldname), required=.false.)) then
          inic_wet = .true.
-         call read_dyn_var(trim(fieldname), fh_ini, dimname, dbuf2)
+         call read_dyn_var(trim(fieldname), fh_ini, ini_grid_hdim_name, dbuf2)
       elseif (dyn_field_exists(fh_ini, trim(fieldname2), required=.false.)) then
          inic_wet = .false.
-         call read_dyn_var(trim(fieldname2), fh_ini, dimname, dbuf2)
+         call read_dyn_var(trim(fieldname2), fh_ini, ini_grid_hdim_name, dbuf2)
       else
-         call endrun(trim(subname)//': PS or PSDRY must be on GLL grid')
+         call endrun(trim(sub)//': PS or PSDRY must be on GLL grid')
       end if
 #ifndef planet_mars
       if (iam < par%nprocs) then
          if (minval(dbuf2, mask=reshape(pmask, (/npsq,nelemd/))) < 10000._r8) then
-            call endrun(trim(subname)//': Problem reading ps or psdry field -- bad values')
+            call endrun(trim(sub)//': Problem reading ps or psdry field -- bad values')
          end if
       end if
 #endif
@@ -1365,9 +1388,9 @@ subroutine read_inidat(dyn_in)
       ! Read in 3-D fields
 
       if (dyn_field_exists(fh_ini, 'U')) then
-         call read_dyn_var('U', fh_ini, dimname, dbuf3)
+         call read_dyn_var('U', fh_ini, ini_grid_hdim_name, dbuf3)
       else
-         call endrun(trim(subname)//': U not found')
+         call endrun(trim(sub)//': U not found')
       end if
       do ie = 1, nelemd
          elem(ie)%state%v = 0.0_r8
@@ -1381,9 +1404,9 @@ subroutine read_inidat(dyn_in)
       end do
 
       if (dyn_field_exists(fh_ini, 'V')) then
-         call read_dyn_var('V', fh_ini, dimname, dbuf3)
+         call read_dyn_var('V', fh_ini, ini_grid_hdim_name, dbuf3)
       else
-         call endrun(trim(subname)//': V not found')
+         call endrun(trim(sub)//': V not found')
       end if
       do ie = 1, nelemd
          indx = 1
@@ -1396,9 +1419,9 @@ subroutine read_inidat(dyn_in)
       end do
 
       if (dyn_field_exists(fh_ini, 'T')) then
-         call read_dyn_var('T', fh_ini, dimname, dbuf3)
+         call read_dyn_var('T', fh_ini, ini_grid_hdim_name, dbuf3)
       else
-         call endrun(trim(subname)//': T not found')
+         call endrun(trim(sub)//': T not found')
       end if
       do ie=1,nelemd
          elem(ie)%state%T = 0.0_r8
@@ -1413,7 +1436,7 @@ subroutine read_inidat(dyn_in)
 
       if (pertlim .ne. 0.0_r8) then
          if (masterproc) then
-            write(iulog,*) trim(subname), ': Adding random perturbation bounded', &
+            write(iulog,*) trim(sub), ': Adding random perturbation bounded', &
                'by +/- ', pertlim, ' to initial temperature field'
          end if
 
@@ -1460,11 +1483,11 @@ subroutine read_inidat(dyn_in)
       if (ntrac < pcnst) then
          write(errmsg, '(a,3(i0,a))') ': ntrac (',ntrac,') > qsize (',qsize, &
             ') but < pcnst (',pcnst,')'
-         call endrun(trim(subname)//errmsg)
+         call endrun(trim(sub)//errmsg)
       end if
    else if (qsize < pcnst) then
       write(errmsg, '(a,2(i0,a))') ': qsize (',qsize,') < pcnst (',pcnst,')'
-      call endrun(trim(subname)//errmsg)
+      call endrun(trim(sub)//errmsg)
    end if
 
    ! If using analytic ICs the initial file only needs the horizonal grid
@@ -1473,7 +1496,7 @@ subroutine read_inidat(dyn_in)
    do m_cnst = 1, pcnst
       if (cnst_read_iv(m_cnst) .and. .not. cnst_is_a_water_species(cnst_name(m_cnst))) then
          if (dyn_field_exists(fh_ini, trim(cnst_name(m_cnst)), required=.false.)) then
-            call check_file_layout(fh_ini, elem, dyn_cols, 'ncdata', .true., dimname)
+            call check_file_layout(fh_ini, elem, dyn_cols, 'ncdata', .true.)
             exit
          end if
       end if
@@ -1491,7 +1514,7 @@ subroutine read_inidat(dyn_in)
       end if
 
       if (found) then
-         call read_dyn_var(trim(cnst_name(m_cnst)), fh_ini, dimname, dbuf3)
+         call read_dyn_var(trim(cnst_name(m_cnst)), fh_ini, ini_grid_hdim_name, dbuf3)
       else
          call cnst_init_default(m_cnst, latvals, lonvals, dbuf3, pmask)
       end if
@@ -1673,28 +1696,22 @@ subroutine read_inidat(dyn_in)
       end do
    end if
 
-   ! scale PS to achieve prescribed dry mass following FV dycore (dryairm.F90)
-#ifndef planet_mars
+   ! If scale_dry_air_mass > 0.0 then scale dry air mass to scale_dry_air_mass global average dry pressure
    if (runtype == 0) then
-      initial_global_ave_dry_ps = 98288.0_r8
-      if (.not. associated(fh_topo)) then
-         initial_global_ave_dry_ps = 101325._r8 - 245._r8
-      end if
-      if (simple_phys) then
-         initial_global_ave_dry_ps = 0                  !do not scale psdry
-      end if
-      if (iam < par%nprocs) then
-        call prim_set_dry_mass(elem, hvcoord, initial_global_ave_dry_ps, qtmp)
-      end if
-   endif
-#endif
+     if (scale_dry_air_mass > 0.0_r8) then
+       if (iam < par%nprocs) then
+         call prim_set_dry_mass(elem, hvcoord, scale_dry_air_mass, qtmp)
+       end if
+     end if
+   end if
+
    ! store Q values:
    !
    ! if CSLAM is NOT active then state%Qdp for all constituents
    ! if CSLAM active then we only advect water vapor and condensate
    ! loading tracers in state%qdp
 
-   if (ntrac > 0) then
+   if (use_cslam) then
       do ie = 1, nelemd
          do nq = 1, thermodynamic_active_species_num
             m_cnst = thermodynamic_active_species_idx(nq)
@@ -1725,7 +1742,7 @@ subroutine read_inidat(dyn_in)
 
    ! interpolate fvm tracers and fvm pressure variables
 
-   if (ntrac > 0) then
+   if (use_cslam) then
       if (par%masterproc) then
          write(iulog,*) 'Initializing dp_fvm from spectral element dp'
       end if
@@ -1747,7 +1764,7 @@ subroutine read_inidat(dyn_in)
          write(iulog,*) 'FVM tracers, FVM pressure variables and se_area_sphere initialized.'
       end if
 
-   end if    ! (ntrac > 0)
+   end if    ! (use_cslam)
 
    ! Cleanup
    deallocate(qtmp)
@@ -1798,6 +1815,7 @@ subroutine set_phis(dyn_in)
    integer                          :: ierr, pio_errtype
 
    character(len=max_fieldname_len) :: fieldname
+   character(len=max_fieldname_len) :: fieldname_gll
    character(len=max_hcoordname_len):: grid_name
    integer                          :: dims(2)
    integer                          :: dyn_cols
@@ -1817,7 +1835,7 @@ subroutine set_phis(dyn_in)
    real(r8), allocatable            :: latvals_phys(:)
    real(r8), allocatable            :: lonvals_phys(:)
 
-   character(len=*), parameter      :: subname='set_phis'
+   character(len=*), parameter      :: sub='set_phis'
    !----------------------------------------------------------------------------
 
    fh_topo => topo_file_get_id()
@@ -1831,7 +1849,7 @@ subroutine set_phis(dyn_in)
    allocate(phis_tmp(npsq,nelemd))
    phis_tmp = 0.0_r8
 
-   if (fv_nphys > 0) then
+   if (use_cslam) then
       allocate(phis_phys_tmp(fv_nphys**2,nelemd))
       phis_phys_tmp = 0.0_r8
       do ie=1,nelemd
@@ -1856,7 +1874,7 @@ subroutine set_phis(dyn_in)
 
       ! Set name of grid object which will be used to read data from file
       ! into internal data structure via PIO.
-      if (fv_nphys == 0) then
+      if (.not.use_cslam) then
          grid_name = 'GLL'
       else
          grid_name = 'physgrid_d'
@@ -1870,27 +1888,52 @@ subroutine set_phis(dyn_in)
       ! The dimension of the unstructured grid in the TOPO file is 'ncol'.
       ierr = pio_inq_dimid(fh_topo, 'ncol', ncol_did)
       if (ierr /= PIO_NOERR) then
-         call endrun(subname//': dimension ncol not found in bnd_topo file')
+         call endrun(sub//': dimension ncol not found in bnd_topo file')
       end if
       ierr = pio_inq_dimlen(fh_topo, ncol_did, ncol_size)
       if (ncol_size /= dyn_cols) then
          if (masterproc) then
-            write(iulog,*) subname//': ncol_size=', ncol_size, ' : dyn_cols=', dyn_cols
+            write(iulog,*) sub//': ncol_size=', ncol_size, ' : dyn_cols=', dyn_cols
          end if
-         call endrun(subname//': ncol size in bnd_topo file does not match grid definition')
+         call endrun(sub//': ncol size in bnd_topo file does not match grid definition')
       end if
 
       fieldname = 'PHIS'
-      if (dyn_field_exists(fh_topo, trim(fieldname))) then
-         if (fv_nphys == 0) then
-           call read_dyn_var(fieldname, fh_topo, 'ncol', phis_tmp)
+      fieldname_gll = 'PHIS_gll'
+      if (use_cslam.and.dyn_field_exists(fh_topo, trim(fieldname_gll),required=.false.)) then
+         !
+         ! If physgrid it is recommended to read in PHIS on the GLL grid and then
+         ! map to the physgrid in d_p_coupling
+         !
+         ! This requires a topo file with PHIS_gll on it ...
+         !
+         if (masterproc) then
+            write(iulog, *) "Reading in PHIS on GLL grid (mapped to physgrid in d_p_coupling)"
+         end if
+         call read_dyn_var(fieldname_gll, fh_topo, 'ncol_gll', phis_tmp)
+      else if (dyn_field_exists(fh_topo, trim(fieldname))) then
+         if (.not.use_cslam) then
+            if (masterproc) then
+               write(iulog, *) "Reading in PHIS"
+            end if
+            call read_dyn_var(fieldname, fh_topo, 'ncol', phis_tmp)
          else
-           call read_phys_field_2d(fieldname, fh_topo, 'ncol', phis_phys_tmp)
-           call map_phis_from_physgrid_to_gll(dyn_in%fvm, elem, phis_phys_tmp, &
-                phis_tmp, pmask)
+            !
+            ! For backwards compatibility we allow reading in PHIS on the physgrid
+            ! which is then mapped to the GLL grid and back to the physgrid in d_p_coupling
+            ! (the latter is to avoid noise in derived quantities such as PSL)
+            !
+            if (masterproc) then
+               write(iulog, *) "Reading in PHIS on physgrid"
+               write(iulog, *) "Recommended to read in PHIS on GLL grid"
+            end if
+            call read_phys_field_2d(fieldname, fh_topo, 'ncol', phis_phys_tmp)
+            call map_phis_from_physgrid_to_gll(dyn_in%fvm, elem, phis_phys_tmp, &
+                 phis_tmp, pmask)
+            deallocate(phis_phys_tmp)
          end if
       else
-         call endrun(subname//': Could not find PHIS field on input datafile')
+         call endrun(sub//': Could not find PHIS field on input datafile')
       end if
 
       ! Put the error handling back the way it was
@@ -1919,44 +1962,6 @@ subroutine set_phis(dyn_in)
                               PHIS_OUT=phis_tmp, mask=pmask(:))
       deallocate(glob_ind)
 
-      if (fv_nphys > 0) then
-
-         ! initialize PHIS on physgrid
-         allocate(latvals_phys(fv_nphys*fv_nphys*nelemd))
-         allocate(lonvals_phys(fv_nphys*fv_nphys*nelemd))
-         indx = 1
-         do ie = 1, nelemd
-            do j = 1, fv_nphys
-               do i = 1, fv_nphys
-                  latvals_phys(indx) = dyn_in%fvm(ie)%center_cart_physgrid(i,j)%lat
-                  lonvals_phys(indx) = dyn_in%fvm(ie)%center_cart_physgrid(i,j)%lon
-                  indx = indx + 1
-               end do
-            end do
-         end do
-
-         allocate(pmask_phys(fv_nphys*fv_nphys*nelemd))
-         pmask_phys(:) = .true.
-         allocate(glob_ind(fv_nphys*fv_nphys*nelemd))
-
-         j = 1
-         do ie = 1, nelemd
-            do i = 1, fv_nphys*fv_nphys
-               ! Create a global(ish) column index
-               glob_ind(j) = elem(ie)%GlobalId
-               j = j + 1
-            end do
-         end do
-
-         call analytic_ic_set_ic(vcoord, latvals_phys, lonvals_phys, glob_ind, &
-                                 PHIS_OUT=phis_phys_tmp, mask=pmask_phys)
-
-         deallocate(latvals_phys)
-         deallocate(lonvals_phys)
-         deallocate(pmask_phys)
-         deallocate(glob_ind)
-      end if
-
    end if
 
    deallocate(pmask)
@@ -1972,16 +1977,7 @@ subroutine set_phis(dyn_in)
          end do
       end do
    end do
-   if (fv_nphys > 0) then
-      do ie = 1, nelemd
-         dyn_in%fvm(ie)%phis_physgrid = RESHAPE(phis_phys_tmp(:,ie),(/fv_nphys,fv_nphys/))
-      end do
-   end if
-
    deallocate(phis_tmp)
-   if (fv_nphys > 0) then
-      deallocate(phis_phys_tmp)
-   end if
 
    ! boundary exchange to update the redundent columns in the element objects
    do ie = 1, nelemd
@@ -1989,7 +1985,7 @@ subroutine set_phis(dyn_in)
       call edgeVpack(edgebuf, elem(ie)%state%phis, 1, kptr, ie)
    end do
    if(iam < par%nprocs) then
-      call bndry_exchange(par, edgebuf, location=subname)
+      call bndry_exchange(par, edgebuf, location=sub)
    end if
    do ie = 1, nelemd
       kptr = 0
@@ -2000,7 +1996,7 @@ end subroutine set_phis
 
 !========================================================================================
 
-subroutine check_file_layout(file, elem, dyn_cols, file_desc, dyn_ok, dimname)
+subroutine check_file_layout(file, elem, dyn_cols, file_desc, dyn_ok)
 
    ! This routine is only called when data will be read from the initial file.  It is not
    ! called when the initial file is only supplying vertical coordinate info.
@@ -2010,48 +2006,48 @@ subroutine check_file_layout(file, elem, dyn_cols, file_desc, dyn_ok, dimname)
    integer,           intent(in)    :: dyn_cols
    character(len=*),  intent(in)    :: file_desc
    logical,           intent(in)    :: dyn_ok ! .true. iff ncol_d is okay
-   character(len=*),  intent(out)   :: dimname
 
    integer                          :: ncol_did, ncol_size
    integer                          :: ierr
    integer                          :: ie, i, j
-   integer                          :: grid_id
    integer                          :: indx
    real(r8)                         :: dbuf2(npsq, nelemd)
    logical                          :: found
-   character(len=max_fieldname_len) :: dimname2, coordname
+   character(len=max_fieldname_len) :: coordname
 
-   character(len=*), parameter      :: subname = 'check_file_layout'
+   character(len=*), parameter      :: sub = 'check_file_layout'
    !----------------------------------------------------------------------------
 
    ! Check that number of columns in IC file matches grid definition.
+   if (trim(ini_grid_hdim_name) == 'none') then
+      call endrun(sub//': ERROR: no horizontal dimension in initial data file. &
+         &Cannot read data from file')
+   end if
 
-   call cam_grid_get_dim_names(cam_grid_id(ini_grid_name), dimname, dimname2)
-
-   ierr = pio_inq_dimid(file, trim(dimname), ncol_did)
+   ierr = pio_inq_dimid(file, trim(ini_grid_hdim_name), ncol_did)
    if (ierr /= PIO_NOERR) then
-      call endrun(subname//': ERROR: either ncol or ncol_d dimension not found in ' &
+      call endrun(sub//': ERROR: '//trim(ini_grid_hdim_name)//' dimension not found in ' &
          //trim(file_desc)//' file')
    end if
 
    ierr = pio_inq_dimlen(file, ncol_did, ncol_size)
    if (ncol_size /= dyn_cols) then
       if (masterproc) then
-         write(iulog, '(a,2(a,i0))') trim(subname), ': ncol_size=', ncol_size, &
+         write(iulog, '(a,2(a,i0))') trim(sub), ': ncol_size=', ncol_size, &
              ' : dyn_cols=', dyn_cols
       end if
-      call endrun(subname//': ERROR: dimension ncol size not same as in ncdata file')
+      call endrun(sub//': ERROR: dimension '//trim(ini_grid_hdim_name)//' size not same as in ncdata file')
    end if
 
-   ! Set coordinate name associated with dimname.
-   if (dimname == 'ncol') then
+   ! Set coordinate name associated with ini_grid_hdim_name.
+   if (trim(ini_grid_hdim_name) == 'ncol') then
       coordname = 'lat'
    else
       coordname = 'lat_d'
    end if
 
    !! Check to make sure file is in correct order
-   call read_dyn_var(coordname, file, dimname, dbuf2)
+   call read_dyn_var(coordname, file, ini_grid_hdim_name, dbuf2)
    found = .true.
    do ie = 1, nelemd
       indx = 1
@@ -2077,13 +2073,13 @@ subroutine check_file_layout(file, elem, dyn_cols, file_desc, dyn_ok, dimname)
       call endrun("ncdata file latitudes not in correct column order")
    end if
 
-   if (dimname == 'ncol') then
+   if (trim(ini_grid_hdim_name) == 'ncol') then
       coordname = 'lon'
    else
       coordname = 'lon_d'
    end if
 
-   call read_dyn_var(coordname, file, dimname, dbuf2)
+   call read_dyn_var(coordname, file, ini_grid_hdim_name, dbuf2)
    do ie = 1, nelemd
       indx = 1
       do j = 1, np
@@ -2292,7 +2288,7 @@ subroutine write_dyn_vars(dyn_out)
    integer                      :: ie, m
    !----------------------------------------------------------------------------
 
-   if (ntrac > 0) then
+   if (use_cslam) then
       do ie = 1, nelemd
          call outfld('dp_fvm', RESHAPE(dyn_out%fvm(ie)%dp_fvm(1:nc,1:nc,:), &
                                        (/nc*nc,nlev/)), nc*nc, ie)

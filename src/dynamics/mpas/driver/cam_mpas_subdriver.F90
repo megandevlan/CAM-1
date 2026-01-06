@@ -10,8 +10,9 @@ module cam_mpas_subdriver
 !
 !-------------------------------------------------------------------------------
 
-
-    use mpas_derived_types, only : core_type, dm_info, domain_type, MPAS_Clock_type
+    use cam_abortutils, only: endrun
+    use mpas_derived_types, only : core_type, domain_type, MPAS_Clock_type
+    use phys_control,   only: use_gw_front, use_gw_front_igw
 
     implicit none
 
@@ -32,7 +33,9 @@ module cam_mpas_subdriver
               cam_mpas_cell_to_edge_winds, &
               cam_mpas_run, &
               cam_mpas_finalize, &
-              cam_mpas_debug_stream
+              cam_mpas_debug_stream, &
+              cam_mpas_global_sum_real
+
     public :: corelist, domain_ptr
 
     private
@@ -73,7 +76,6 @@ contains
        use mpas_domain_routines, only : mpas_allocate_domain
        use mpas_framework, only : mpas_framework_init_phase1
        use atm_core_interface, only : atm_setup_core, atm_setup_domain
-       use mpas_pool_routines, only : mpas_pool_add_config
        use mpas_kind_types, only : RKIND
 
        ! Dummy argument
@@ -88,16 +90,19 @@ contains
        character(len=*), parameter :: subname = 'cam_mpas_subdriver::cam_mpas_init_phase1'
 
 
-       allocate(corelist)
+       allocate(corelist, stat=ierr)
+       if( ierr /= 0 ) call endrun(subname//':failed to allocate corelist array')
        nullify(corelist % next)
 
-       allocate(corelist % domainlist)
+       allocate(corelist % domainlist, stat=ierr)
+       if( ierr /= 0 ) call endrun(subname//':failed to allocate corelist%domainlist%next array')
        nullify(corelist % domainlist % next)
 
        domain_ptr => corelist % domainlist
        domain_ptr % core => corelist
 
        call mpas_allocate_domain(domain_ptr)
+       domain_ptr % domainID = 0
 
 
        !
@@ -142,18 +147,17 @@ contains
     !-----------------------------------------------------------------------
     subroutine cam_mpas_init_phase2(pio_subsystem, endrun, cam_calendar)
 
-       use mpas_log, only : mpas_log_write
        use mpas_kind_types, only : ShortStrKIND
        use pio_types, only : iosystem_desc_t
 
        use mpas_framework, only : mpas_framework_init_phase2
+       use mpas_timer, only : mpas_timer_start
 
        type (iosystem_desc_t), pointer :: pio_subsystem
        procedure(halt_model) :: endrun
        character(len=*), intent(in) :: cam_calendar
 
        integer :: ierr
-       logical :: streamsExists
 
        character(len=ShortStrKIND) :: mpas_calendar
 
@@ -174,6 +178,8 @@ contains
 
        ! 4) Continue with normal procedure from MPAS subdriver
        call mpas_framework_init_phase2(domain_ptr, io_system=pio_subsystem, calendar=trim(mpas_calendar))
+
+       call mpas_timer_start('total time')
 
        ierr = domain_ptr % core % define_packages(domain_ptr % packages)
        if ( ierr /= 0 ) then
@@ -213,52 +219,19 @@ contains
     !>  the number of constituents.
     !
     !-----------------------------------------------------------------------
-    subroutine cam_mpas_init_phase3(fh_ini, num_scalars, endrun)
+    subroutine cam_mpas_init_phase3(fh_ini, num_scalars)
 
-       use mpas_log, only : mpas_log_write
        use pio, only : file_desc_t
-       use iso_c_binding, only : c_int, c_char, c_ptr, c_loc
-
-       use mpas_derived_types, only : MPAS_Time_type, MPAS_TimeInterval_type
-       use mpas_derived_types, only : MPAS_IO_PNETCDF, MPAS_IO_PNETCDF5, MPAS_IO_NETCDF, MPAS_IO_NETCDF4
-       use mpas_derived_types, only : MPAS_START_TIME
-       use mpas_derived_types, only : MPAS_STREAM_MGR_NOERR
-       use mpas_timekeeping, only : mpas_get_clock_time, mpas_get_time, mpas_expand_string, mpas_set_time, &
-                                    mpas_set_timeInterval
-       use mpas_stream_manager, only : MPAS_stream_mgr_init, mpas_build_stream_filename, MPAS_stream_mgr_validate_streams
-       use mpas_kind_types, only : StrKIND
-       use mpas_c_interfacing, only : mpas_c_to_f_string, mpas_f_to_c_string
+       use mpas_derived_types, only : MPAS_IO_NETCDF
+       use mpas_kind_types,    only : StrKIND
        use mpas_bootstrapping, only : mpas_bootstrap_framework_phase1, mpas_bootstrap_framework_phase2
        use mpas_pool_routines, only : mpas_pool_add_config
 
        type (file_desc_t), intent(inout) :: fh_ini
        integer, intent(in) :: num_scalars
-       procedure(halt_model) :: endrun
 
-       integer :: ierr
-       character(kind=c_char), dimension(StrKIND+1) :: c_filename       ! StrKIND+1 for C null-termination character
-       integer(kind=c_int) :: c_comm
-       integer(kind=c_int) :: c_ierr
-       type (c_ptr) :: mgr_p
-       character(len=StrKIND) :: mesh_stream
        character(len=StrKIND) :: mesh_filename
-       character(len=StrKIND) :: mesh_filename_temp
-       character(len=StrKIND) :: ref_time_temp
-       character(len=StrKIND) :: filename_interval_temp
-       character(kind=c_char), dimension(StrKIND+1) :: c_mesh_stream
-       character(kind=c_char), dimension(StrKIND+1) :: c_mesh_filename_temp
-       character(kind=c_char), dimension(StrKIND+1) :: c_ref_time_temp
-       character(kind=c_char), dimension(StrKIND+1) :: c_filename_interval_temp
-       character(kind=c_char), dimension(StrKIND+1) :: c_iotype
-       type (MPAS_Time_type) :: start_time
-       type (MPAS_Time_type) :: ref_time
-       type (MPAS_TimeInterval_type) :: filename_interval
-       character(len=StrKIND) :: start_timestamp
-       character(len=StrKIND) :: iotype
-       logical :: streamsExists
        integer :: mesh_iotype
-       integer :: blockID
-       character(len=StrKIND) :: timeStamp
 
        character(len=*), parameter :: subname = 'cam_mpas_subdriver::cam_mpas_init_phase3'
 
@@ -305,14 +278,13 @@ contains
        use mpas_pool_routines, only : mpas_pool_get_subpool, mpas_pool_get_dimension, mpas_pool_get_config, &
                                       mpas_pool_get_field, mpas_pool_get_array, mpas_pool_initialize_time_levels
        use atm_core, only : atm_mpas_init_block, core_clock => clock
-       use mpas_dmpar, only : mpas_dmpar_exch_halo_field
+       use mpas_atm_halos, only : atm_build_halo_groups, exchange_halo_group
+       use atm_time_integration, only : mpas_atm_dynamics_init
 
        procedure(halt_model) :: endrun
 
        real (kind=RKIND), pointer :: dt
 
-       character(len=StrKIND) :: timeStamp
-       integer :: i
        logical, pointer :: config_do_restart
 
        type (mpas_pool_type), pointer :: state
@@ -355,6 +327,14 @@ contains
        clock => domain_ptr % clock
        core_clock => domain_ptr % clock
 
+       !
+       ! Build halo exchange groups and set method for exchanging halos in a group
+       !
+       call atm_build_halo_groups(domain_ptr, ierr)
+       if (ierr /= 0) then
+	       call endrun(subname//':failed to build MPAS-A halo exchange groups.')
+       end if
+
 
        call mpas_pool_get_config(domain_ptr % blocklist % configs, 'config_do_restart', config_do_restart)
        call mpas_pool_get_config(domain_ptr % blocklist % configs, 'config_dt', dt)
@@ -373,12 +353,10 @@ contains
        if ( ierr /= 0 ) then
           call endrun(subname//': failed to get MPAS_START_TIME')
        end if
-       call mpas_get_time(startTime, dateTimeString=startTimeStamp) 
+       call mpas_get_time(startTime, dateTimeString=startTimeStamp)
 
 
-       call mpas_pool_get_subpool(domain_ptr % blocklist % structs, 'state', state)
-       call mpas_pool_get_field(state, 'u', u_field, 1)
-       call mpas_dmpar_exch_halo_field(u_field)
+       call exchange_halo_group(domain_ptr, 'initialization:u')
 
        call mpas_pool_get_subpool(domain_ptr % blocklist % structs, 'mesh', mesh)
        call mpas_pool_get_subpool(domain_ptr % blocklist % structs, 'state', state)
@@ -395,15 +373,12 @@ contains
        call mpas_pool_get_array(state, 'initial_time', initial_time2, 2)
        initial_time2 = initial_time1
 
-       call mpas_pool_get_subpool(domain_ptr % blocklist % structs, 'diag', diag)
-       call mpas_pool_get_field(diag, 'pv_edge', pv_edge_field)
-       call mpas_dmpar_exch_halo_field(pv_edge_field)
+       call exchange_halo_group(domain_ptr, 'initialization:pv_edge,ru,rw')
 
-       call mpas_pool_get_field(diag, 'ru', ru_field)
-       call mpas_dmpar_exch_halo_field(ru_field)
-
-       call mpas_pool_get_field(diag, 'rw', rw_field)
-       call mpas_dmpar_exch_halo_field(rw_field)
+       !
+       ! Prepare the dynamics for integration
+       !
+       call mpas_atm_dynamics_init(domain_ptr)
 
     end subroutine cam_mpas_init_phase4
 
@@ -424,7 +399,7 @@ contains
     !>  to reorder the constituents; to allow for mapping of indices between CAM
     !>  physics and the MPAS-A dycore, this routine returns index mapping arrays
     !>  mpas_from_cam_cnst and cam_from_mpas_cnst.
-    !>  
+    !>
     !
     !-----------------------------------------------------------------------
     subroutine cam_mpas_define_scalars(block, mpas_from_cam_cnst, cam_from_mpas_cnst, ierr)
@@ -516,7 +491,8 @@ contains
        !
        ! Determine which of the constituents are moisture species
        !
-       allocate(mpas_from_cam_cnst(num_scalars))
+       allocate(mpas_from_cam_cnst(num_scalars), stat=ierr)
+       if( ierr /= 0 ) call endrun(subname//':failed to allocate mpas_from_cam_cnst array')
        mpas_from_cam_cnst(:) = 0
        num_moist = 0
        do i = 1, size(cnst_name)
@@ -549,7 +525,8 @@ contains
        !
        ! Create inverse map, cam_from_mpas_cnst
        !
-       allocate(cam_from_mpas_cnst(num_scalars))
+       allocate(cam_from_mpas_cnst(num_scalars), stat=ierr)
+       if( ierr /= 0 ) call endrun(subname//':failed to allocate cam_from_mpas_cnst array')
        cam_from_mpas_cnst(:) = 0
 
        do i = 1, size(cnst_name)
@@ -680,7 +657,6 @@ contains
 
        type (mpas_pool_type), pointer :: meshPool
 
-
        call mpas_pool_get_subpool(domain_ptr % blocklist % structs, 'mesh', meshPool)
        call mpas_pool_get_dimension(meshPool, 'nCellsSolve', nCellsSolve)
        call mpas_pool_get_dimension(meshPool, 'nEdgesSolve', nEdgesSolve)
@@ -720,7 +696,7 @@ contains
        use mpas_pool_routines, only : mpas_pool_get_subpool, mpas_pool_get_dimension, mpas_pool_get_array
        use mpas_derived_types, only : mpas_pool_type
        use mpas_kind_types, only : RKIND
-       use mpas_dmpar, only : mpas_dmpar_sum_int, mpas_dmpar_max_int, mpas_dmpar_max_real_array
+       use mpas_dmpar, only : mpas_dmpar_sum_int, mpas_dmpar_max_real_array
 
        real (kind=RKIND), dimension(:), intent(out) :: latCellGlobal
        real (kind=RKIND), dimension(:), intent(out) :: lonCellGlobal
@@ -732,12 +708,14 @@ contains
        integer, dimension(:), pointer :: indexToCellID
 
        type (mpas_pool_type), pointer :: meshPool
-       integer :: nCellsGlobal
+       integer :: nCellsGlobal,ierr
 
        real (kind=RKIND), dimension(:), pointer :: latCell
        real (kind=RKIND), dimension(:), pointer :: lonCell
        real (kind=RKIND), dimension(:), pointer :: areaCell
        real (kind=RKIND), dimension(:), pointer :: temp
+
+       character(len=*), parameter :: subname = 'cam_mpas_subdriver::cam_mpas_get_global_coords'
 
 
        call mpas_pool_get_subpool(domain_ptr % blocklist % structs, 'mesh', meshPool)
@@ -751,8 +729,9 @@ contains
 
        ! check: size(latCellGlobal) ?= nCellsGlobal
 
-       allocate(temp(nCellsGlobal))
-       
+       allocate(temp(nCellsGlobal), stat=ierr)
+       if( ierr /= 0 ) call endrun(subname//':failed to allocate temp array')
+
        !
        ! latCellGlobal
        !
@@ -813,6 +792,7 @@ contains
        use mpas_pool_routines, only : mpas_pool_get_subpool, mpas_pool_get_dimension, mpas_pool_get_array
        use mpas_derived_types, only : mpas_pool_type
        use mpas_dmpar, only : mpas_dmpar_max_int_array
+       use string_utils, only: int2str
 
        integer, dimension(:), intent(out) :: nCellsPerBlock
        integer, dimension(:,:), intent(out) :: indexToCellIDBlock
@@ -825,7 +805,8 @@ contains
        integer, pointer :: nCellsSolve
        integer, dimension(:), pointer :: indexToCellID
        integer, dimension(:), pointer :: temp1d
-
+       integer :: ierr
+       character(len=*), parameter :: subname = 'cam_mpas_subdriver::cam_mpas_get_global_blocks'
 
        call mpas_pool_get_subpool(domain_ptr % blocklist % structs, 'mesh', meshPool)
        call mpas_pool_get_dimension(meshPool, 'nCellsSolve', nCellsSolve)
@@ -834,7 +815,8 @@ contains
        !
        ! nCellsPerBlock
        !
-       allocate(temp1d(size(nCellsPerBlock)))
+       allocate(temp1d(size(nCellsPerBlock)), stat=ierr)
+       if( ierr /= 0 ) call endrun(subname//':failed to allocate temp1d array at line:'//int2str(__LINE__))
        temp1d(:) = 0
        temp1d(domain_ptr % dminfo % my_proc_id + 1) = nCellsSolve
 
@@ -845,7 +827,8 @@ contains
        !
        ! indexToBlockID
        !
-       allocate(temp1d(size(indexToBlockID)))
+       allocate(temp1d(size(indexToBlockID)), stat=ierr)
+       if( ierr /= 0 ) call endrun(subname//':failed to allocate temp1d array at line:'//int2str(__LINE__))
        temp1d(:) = -1
        do iCell=1,nCellsSolve
           temp1d(indexToCellID(iCell)) = domain_ptr % dminfo % my_proc_id + 1   ! 1-based block indices?
@@ -858,7 +841,8 @@ contains
        !
        ! localCellIDBlock
        !
-       allocate(temp1d(size(localCellIDBlock)))
+       allocate(temp1d(size(localCellIDBlock)), stat=ierr)
+       if( ierr /= 0 ) call endrun(subname//':failed to allocate temp1d array at line:'//int2str(__LINE__))
        temp1d(:) = 0
        do iCell = 1, nCellsSolve
           temp1d(indexToCellID(iCell)) = iCell
@@ -923,6 +907,7 @@ contains
        integer :: ierr_total
        type (MPAS_pool_type), pointer :: meshPool
        type (MPAS_pool_type), pointer :: reindexPool
+       type (MPAS_pool_type), pointer :: allPackages, reindexPkgs
        type (field1DReal), pointer :: latCell, lonCell, xCell, yCell, zCell
        type (field1DReal), pointer :: latEdge, lonEdge, xEdge, yEdge, zEdge
        type (field1DReal), pointer :: latVertex, lonVertex, xVertex, yVertex, zVertex
@@ -940,9 +925,12 @@ contains
        type (field3DReal), pointer :: zb, zb3, deriv_two, cellTangentPlane, coeffs_reconstruct
 
        type (field2DReal), pointer :: edgeNormalVectors, localVerticalUnitVectors, defc_a, defc_b
+       type (field2DReal), pointer :: cell_gradient_coef_x, cell_gradient_coef_y
 
        type (MPAS_Stream_type) :: mesh_stream
 
+       nullify(cell_gradient_coef_x)
+       nullify(cell_gradient_coef_y)
 
        call MPAS_createStream(mesh_stream, domain_ptr % ioContext, 'not_used', MPAS_IO_NETCDF, MPAS_IO_READ, &
                               pio_file_desc=fh_ini, ierr=ierr)
@@ -1021,8 +1009,14 @@ contains
 
        call mpas_pool_get_field(meshPool, 'edgeNormalVectors', edgeNormalVectors)
        call mpas_pool_get_field(meshPool, 'localVerticalUnitVectors', localVerticalUnitVectors)
+
        call mpas_pool_get_field(meshPool, 'defc_a', defc_a)
        call mpas_pool_get_field(meshPool, 'defc_b', defc_b)
+
+       if (use_gw_front .or. use_gw_front_igw) then
+          call mpas_pool_get_field(meshPool, 'cell_gradient_coef_x', cell_gradient_coef_x)
+          call mpas_pool_get_field(meshPool, 'cell_gradient_coef_y', cell_gradient_coef_y)
+       endif
 
        ierr_total = 0
 
@@ -1155,6 +1149,12 @@ contains
        if (ierr /= MPAS_STREAM_NOERR) ierr_total = ierr_total + 1
        call MPAS_streamAddField(mesh_stream, defc_b, ierr=ierr)
        if (ierr /= MPAS_STREAM_NOERR) ierr_total = ierr_total + 1
+       if (use_gw_front .or. use_gw_front_igw) then
+          call MPAS_streamAddField(mesh_stream, cell_gradient_coef_x, ierr=ierr)
+          if (ierr /= MPAS_STREAM_NOERR) ierr_total = ierr_total + 1
+          call MPAS_streamAddField(mesh_stream, cell_gradient_coef_y, ierr=ierr)
+          if (ierr /= MPAS_STREAM_NOERR) ierr_total = ierr_total + 1
+       endif
 
        if (ierr_total > 0) then
            write(errString, '(a,i0,a)') subname//': FATAL: Failed to add ', ierr_total, ' fields to static input stream.'
@@ -1236,7 +1236,10 @@ contains
        call MPAS_dmpar_exch_halo_field(localVerticalUnitVectors)
        call MPAS_dmpar_exch_halo_field(defc_a)
        call MPAS_dmpar_exch_halo_field(defc_b)
-
+       if (use_gw_front .or. use_gw_front_igw) then
+          call MPAS_dmpar_exch_halo_field(cell_gradient_coef_x)
+          call MPAS_dmpar_exch_halo_field(cell_gradient_coef_y)
+       endif
        !
        ! Re-index from global index space to local index space
        !
@@ -1251,9 +1254,15 @@ contains
        call MPAS_pool_add_config(reindexPool, 'edgesOnVertex', 1)
        call MPAS_pool_add_config(reindexPool, 'cellsOnVertex', 1)
 
-       call postread_reindex(meshPool, reindexPool)
+       ! Use an empty package list for reindexPool
+       call MPAS_pool_create_pool(reindexPkgs)
+
+       call postread_reindex(meshPool, domain_ptr % streamManager % allPackages, &
+	                     reindexPool, reindexPkgs)
+
 
        call MPAS_pool_destroy_pool(reindexPool)
+       call MPAS_pool_destroy_pool(reindexPkgs)
 
     end subroutine cam_mpas_read_static
 
@@ -1319,6 +1328,7 @@ contains
        type (field3DReal), pointer :: zb, zb3, deriv_two, cellTangentPlane, coeffs_reconstruct
 
        type (field2DReal), pointer :: edgeNormalVectors, localVerticalUnitVectors, defc_a, defc_b
+       type (field2DReal), pointer :: cell_gradient_coef_x, cell_gradient_coef_y
 
        type (field0DChar), pointer :: initial_time
        type (field0DChar), pointer :: xtime
@@ -1358,10 +1368,8 @@ contains
        type (field1DReal), pointer :: u_init
        type (field1DReal), pointer :: qv_init
 
-       type (field2DReal), pointer :: tend_ru_physics
-       type (field2DReal), pointer :: tend_rtheta_physics
-       type (field2DReal), pointer :: tend_rho_physics
-
+       nullify(cell_gradient_coef_x)
+       nullify(cell_gradient_coef_y)
 
        call MPAS_createStream(restart_stream, domain_ptr % ioContext, 'not_used', MPAS_IO_NETCDF, &
                               direction, pio_file_desc=fh_rst, ierr=ierr)
@@ -1442,7 +1450,10 @@ contains
        call mpas_pool_get_field(allFields, 'localVerticalUnitVectors', localVerticalUnitVectors)
        call mpas_pool_get_field(allFields, 'defc_a', defc_a)
        call mpas_pool_get_field(allFields, 'defc_b', defc_b)
-
+       if (use_gw_front .or. use_gw_front_igw) then
+          call mpas_pool_get_field(allFields, 'cell_gradient_coef_x', cell_gradient_coef_x)
+          call mpas_pool_get_field(allFields, 'cell_gradient_coef_y', cell_gradient_coef_y)
+       endif
        call mpas_pool_get_field(allFields, 'initial_time', initial_time, timeLevel=1)
        call mpas_pool_get_field(allFields, 'xtime', xtime, timeLevel=1)
        call mpas_pool_get_field(allFields, 'u', u, timeLevel=1)
@@ -1480,10 +1491,6 @@ contains
 
        call mpas_pool_get_field(allFields, 'u_init', u_init)
        call mpas_pool_get_field(allFields, 'qv_init', qv_init)
-
-       call mpas_pool_get_field(allFields, 'tend_ru_physics', tend_ru_physics)
-       call mpas_pool_get_field(allFields, 'tend_rtheta_physics', tend_rtheta_physics)
-       call mpas_pool_get_field(allFields, 'tend_rho_physics', tend_rho_physics)
 
        ierr_total = 0
 
@@ -1616,7 +1623,12 @@ contains
        if (ierr /= MPAS_STREAM_NOERR) ierr_total = ierr_total + 1
        call MPAS_streamAddField(restart_stream, defc_b, ierr=ierr)
        if (ierr /= MPAS_STREAM_NOERR) ierr_total = ierr_total + 1
-
+       if (use_gw_front .or. use_gw_front_igw) then
+          call MPAS_streamAddField(restart_stream, cell_gradient_coef_x, ierr=ierr)
+          if (ierr /= MPAS_STREAM_NOERR) ierr_total = ierr_total + 1
+          call MPAS_streamAddField(restart_stream, cell_gradient_coef_y, ierr=ierr)
+          if (ierr /= MPAS_STREAM_NOERR) ierr_total = ierr_total + 1
+       endif
        call MPAS_streamAddField(restart_stream, initial_time, ierr=ierr)
        if (ierr /= MPAS_STREAM_NOERR) ierr_total = ierr_total + 1
        call MPAS_streamAddField(restart_stream, xtime, ierr=ierr)
@@ -1690,13 +1702,6 @@ contains
        call MPAS_streamAddField(restart_stream, qv_init, ierr=ierr)
        if (ierr /= MPAS_STREAM_NOERR) ierr_total = ierr_total + 1
 
-       call MPAS_streamAddField(restart_stream, tend_ru_physics, ierr=ierr)
-       if (ierr /= MPAS_STREAM_NOERR) ierr_total = ierr_total + 1
-       call MPAS_streamAddField(restart_stream, tend_rtheta_physics, ierr=ierr)
-       if (ierr /= MPAS_STREAM_NOERR) ierr_total = ierr_total + 1
-       call MPAS_streamAddField(restart_stream, tend_rho_physics, ierr=ierr)
-       if (ierr /= MPAS_STREAM_NOERR) ierr_total = ierr_total + 1
-
        if (ierr_total > 0) then
            write(errString, '(a,i0,a)') subname//': FATAL: Failed to add ', ierr_total, ' fields to restart stream.'
            call endrun(trim(errString))
@@ -1741,8 +1746,6 @@ contains
     !-----------------------------------------------------------------------
     subroutine cam_mpas_read_restart(restart_stream, endrun)
 
-       use pio, only : file_desc_t
-
        use mpas_io_streams, only : MPAS_readStream, MPAS_closeStream
        use mpas_derived_types, only : MPAS_Stream_type, MPAS_pool_type, MPAS_STREAM_NOERR
        use mpas_pool_routines, only : MPAS_pool_create_pool, MPAS_pool_destroy_pool, MPAS_pool_add_config
@@ -1757,6 +1760,7 @@ contains
 
        integer :: ierr
        type (MPAS_pool_type), pointer :: reindexPool
+       type (MPAS_pool_type), pointer :: reindexPkgs
 
        call MPAS_readStream(restart_stream, 1, ierr=ierr)
        if (ierr /= MPAS_STREAM_NOERR) then
@@ -1833,7 +1837,10 @@ contains
        call cam_mpas_update_halo('localVerticalUnitVectors', endrun)
        call cam_mpas_update_halo('defc_a', endrun)
        call cam_mpas_update_halo('defc_b', endrun)
-
+       if (use_gw_front .or. use_gw_front_igw) then
+          call cam_mpas_update_halo('cell_gradient_coef_x', endrun)
+          call cam_mpas_update_halo('cell_gradient_coef_y', endrun)
+       endif
        call cam_mpas_update_halo('u', endrun)
        call cam_mpas_update_halo('w', endrun)
        call cam_mpas_update_halo('rho_zz', endrun)
@@ -1867,10 +1874,6 @@ contains
        call cam_mpas_update_halo('surface_pressure', endrun)
        call cam_mpas_update_halo('t_init', endrun)
 
-       call cam_mpas_update_halo('tend_ru_physics', endrun)
-       call cam_mpas_update_halo('tend_rtheta_physics', endrun)
-       call cam_mpas_update_halo('tend_rho_physics', endrun)
-
        !
        ! Re-index from global index space to local index space
        !
@@ -1885,9 +1888,15 @@ contains
        call MPAS_pool_add_config(reindexPool, 'edgesOnVertex', 1)
        call MPAS_pool_add_config(reindexPool, 'cellsOnVertex', 1)
 
-       call postread_reindex(domain_ptr % blocklist % allFields, reindexPool)
+       ! Use an empty package list for reindexPool
+       call MPAS_pool_create_pool(reindexPkgs)
+
+       call postread_reindex(domain_ptr % blocklist % allFields, &
+                             domain_ptr % streamManager % allPackages, &
+			     reindexPool, reindexPkgs)
 
        call MPAS_pool_destroy_pool(reindexPool)
+       call MPAS_pool_destroy_pool(reindexPkgs)
 
     end subroutine cam_mpas_read_restart
 
@@ -1907,8 +1916,6 @@ contains
     !-----------------------------------------------------------------------
     subroutine cam_mpas_write_restart(restart_stream, endrun)
 
-       use pio, only : file_desc_t
-
        use mpas_io_streams, only : MPAS_writeStream, MPAS_closeStream
        use mpas_derived_types, only : MPAS_Stream_type, MPAS_pool_type, MPAS_STREAM_NOERR
        use mpas_pool_routines, only : MPAS_pool_create_pool, MPAS_pool_destroy_pool, MPAS_pool_add_config
@@ -1923,6 +1930,7 @@ contains
 
        integer :: ierr
        type (MPAS_pool_type), pointer :: reindexPool
+       type (MPAS_pool_type), pointer :: reindexPkgs
 
        !
        ! Re-index from local index space to global index space
@@ -1938,7 +1946,11 @@ contains
        call MPAS_pool_add_config(reindexPool, 'edgesOnVertex', 1)
        call MPAS_pool_add_config(reindexPool, 'cellsOnVertex', 1)
 
-       call prewrite_reindex(domain_ptr % blocklist % allFields, reindexPool)
+       call MPAS_pool_create_pool(reindexPkgs)
+
+       call prewrite_reindex(domain_ptr % blocklist % allFields, &
+	                     domain_ptr % streamManager % allPackages, &
+		             reindexPool, reindexPkgs)
 
        call MPAS_writeStream(restart_stream, 1, ierr=ierr)
        if (ierr /= MPAS_STREAM_NOERR) then
@@ -1948,6 +1960,7 @@ contains
        call postwrite_reindex(domain_ptr % blocklist % allFields, reindexPool)
 
        call MPAS_pool_destroy_pool(reindexPool)
+       call MPAS_pool_destroy_pool(reindexPkgs)
 
        call MPAS_closeStream(restart_stream, ierr=ierr)
        if (ierr /= MPAS_STREAM_NOERR) then
@@ -1985,6 +1998,8 @@ contains
        real(kind=RKIND), dimension(:,:), pointer :: east, north
        integer, pointer :: nCells
        integer :: iCell
+
+       character(len=*), parameter :: subname = 'cam_mpas_subdriver::cam_mpas_compute_unit_vectors'
 
        call mpas_pool_get_subpool(domain_ptr % blocklist % structs, 'mesh', meshPool)
        call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
@@ -2158,6 +2173,7 @@ contains
 
        integer :: iEdge, cell1, cell2
 
+       character(len=*), parameter :: subname = 'cam_mpas_subdriver::cam_mpas_cell_to_edge_winds'
 
        do iEdge = 1, nEdges
           cell1 = cellsOnEdge(1,iEdge)
@@ -2203,6 +2219,14 @@ contains
                                       mpas_pool_get_subpool, mpas_pool_shift_time_levels
        use mpas_timekeeping, only : mpas_advance_clock, mpas_get_clock_time, mpas_get_time, MPAS_NOW, &
                                     operator(.lt.), operator(+)
+#ifdef __NVCOMPILER
+       !
+       ! Some versions of the nvfortran compiler complain about the illegal use
+       ! of an operator on a derived type if the following specific
+       ! implementations of the < and + operators are not explicitly imported
+       !
+       use mpas_timekeeping, only : lt_t_t, add_t_ti
+#endif
        use mpas_timer, only : mpas_timer_start, mpas_timer_stop
        use mpas_constants, only : Rv_over_Rd => rvord
 
@@ -2224,6 +2248,7 @@ contains
        real(kind=RKIND), dimension(:,:,:), pointer :: scalars
 
        integer, save :: itimestep = 1
+       character(len=*), parameter :: subname = 'cam_mpas_subdriver::cam_mpas_run'
 
        ! Eventually, dt should be domain specific
        call mpas_pool_get_config(domain_ptr % blocklist % configs, 'config_dt', dt)
@@ -2239,17 +2264,17 @@ contains
        runUntilTime = currTime + integrationLength
 
        do while (currTime < runUntilTime)
-          call mpas_get_time(curr_time=currTime, dateTimeString=timeStamp, ierr=ierr)         
+          call mpas_get_time(curr_time=currTime, dateTimeString=timeStamp, ierr=ierr)
           call mpas_log_write('Dynamics timestep beginning at '//trim(timeStamp))
 
           call mpas_timer_start('time integration')
           call atm_do_timestep(domain_ptr, dt, itimestep)
-          call mpas_timer_stop('time integration')   
+          call mpas_timer_stop('time integration')
 
           ! Move time level 2 fields back into time level 1 for next time step
           call mpas_pool_get_subpool(domain_ptr % blocklist % structs, 'state', state)
           call mpas_pool_shift_time_levels(state)
-         
+
           ! Advance clock before writing output
           itimestep = itimestep + 1
           call mpas_advance_clock(clock)
@@ -2292,12 +2317,52 @@ contains
        use mpas_decomp, only : mpas_decomp_destroy_decomp_list
        use mpas_timekeeping, only : mpas_destroy_clock
        use mpas_atm_threading, only : mpas_atm_threading_finalize
+       use mpas_timer, only : mpas_timer_write_header, mpas_timer_write, mpas_timer_finalize
+       use mpas_log, only : mpas_log_finalize
+       use mpas_timer, only : mpas_timer_stop
+       use mpas_framework, only : mpas_framework_finalize
+       use atm_time_integration, only : mpas_atm_dynamics_finalize
+       use mpas_atm_halos, only : atm_destroy_halo_groups
 
+       ! Local variables
        integer :: ierr
+       character(len=*), parameter :: subname = 'cam_mpas_subdriver::cam_mpas_finalize'
+
+
+       !
+       ! Finalize the dynamics
+       !
+       call mpas_atm_dynamics_finalize(domain_ptr)
 
        call mpas_destroy_clock(clock, ierr)
        call mpas_decomp_destroy_decomp_list(domain_ptr % decompositions)
+
+       call atm_destroy_halo_groups(domain_ptr, ierr)
+       if (ierr /= 0) then
+           call endrun(subname//':failed to destroy MPAS-A halo exchange groups.')
+       end if
+
        call mpas_atm_threading_finalize(domain_ptr % blocklist)
+
+       call mpas_timer_stop('total time')
+
+       call mpas_timer_write_header()
+       call mpas_timer_write()
+       call mpas_timer_finalize(domain_ptr)
+
+       !
+       ! Finalize infrastructure
+       !
+
+       ! Print out log stats and close log file
+       !   (Do this after timer stats are printed and stream mgr finalized,
+       !    but before framework is finalized because domain is destroyed there.)
+       call mpas_log_finalize(ierr)
+
+       call mpas_framework_finalize(domain_ptr % dminfo, domain_ptr)
+
+       deallocate(corelist % domainlist)
+       deallocate(corelist)
 
     end subroutine cam_mpas_finalize
 
@@ -2308,11 +2373,10 @@ contains
        use mpas_derived_types, only : MPAS_IO_WRITE, MPAS_IO_NETCDF, MPAS_STREAM_NOERR, MPAS_Stream_type, MPAS_pool_type, &
                                       field0DReal, field1DReal, field2DReal, field3DReal, field4DReal, field5DReal, &
                                       field1DInteger, field2DInteger, field3DInteger
-       use mpas_pool_routines, only : MPAS_pool_get_subpool, MPAS_pool_get_field, MPAS_pool_create_pool, MPAS_pool_destroy_pool, &
-                                      MPAS_pool_add_config
+       use mpas_pool_routines, only : MPAS_pool_get_field
 
        use mpas_derived_types, only : MPAS_Pool_iterator_type, MPAS_POOL_FIELD, MPAS_POOL_REAL, MPAS_POOL_INTEGER
-       use mpas_pool_routines, only : mpas_pool_begin_iteration, mpas_pool_get_next_member, mpas_pool_get_config
+       use mpas_pool_routines, only : mpas_pool_begin_iteration, mpas_pool_get_next_member
 
        type (domain_type), intent(inout) :: domain
        character(len=*), intent(in) :: filename
@@ -2334,6 +2398,7 @@ contains
        type (field3DInteger), pointer :: field_int3d
 
        type (MPAS_Stream_type) :: stream
+       character(len=*), parameter :: subname = 'cam_mpas_subdriver::cam_mpas_debug_stream'
 
 
        call MPAS_createStream(stream, domain % ioContext, trim(filename), MPAS_IO_NETCDF, MPAS_IO_WRITE, &
@@ -2505,6 +2570,35 @@ contains
        end if
 
     end subroutine cam_mpas_debug_stream
+
+
+    !-----------------------------------------------------------------------
+    !  routine cam_mpas_global_sum_real
+    !
+    !> \brief  Compute the global sum of real array
+    !> \author Miles Curry
+    !> \date   25 February 2021
+    !> \details
+    !>  This routine computes a global sum of a real array across all tasks
+    !> in a communicator and returns that sum to all tasks.
+    !>
+    !
+    !-----------------------------------------------------------------------
+    function cam_mpas_global_sum_real(rarray) result(global_sum)
+
+       use mpas_kind_types, only: RKIND
+       use mpas_dmpar, only: mpas_dmpar_sum_real
+
+       ! Input variables
+       real (RKIND), dimension(:), intent(in) :: rarray
+       real (RKIND) :: global_sum
+
+       real (RKIND) :: local_sum
+
+       local_sum = sum(rarray)
+       call mpas_dmpar_sum_real(domain_ptr % dminfo, local_sum, global_sum)
+
+    end function cam_mpas_global_sum_real
 
 
 end module cam_mpas_subdriver
