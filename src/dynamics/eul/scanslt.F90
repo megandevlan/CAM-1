@@ -192,7 +192,8 @@ subroutine scanslt_initial( adv_state, etamid, gravit_in, detam, cwava )
       else
          call plevs0(plon, plon, plev, ps(1,lat,n3), pint, pmid, pdel)
          psinitslt(1,lat)=ps(1,lat,n3)
-
+      end if
+      
       etamid(:) = pmid(lat,:)
       etaint(:) = pint(lat,:)
       if ( any(etamid == 0.0_r8) ) call endrun('etamid == 0')
